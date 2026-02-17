@@ -16,9 +16,9 @@ app = marimo.App(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # Neural ODE Training with a Custom Adjoint (PyTorch)
+    # Neural ODE Training with a Custom Adjoint Solver (PyTorch)
 
-    This notebook converts `week_4/scripts/torch/NODE_adjoint_example.py` into an interactive marimo app.
+    This notebook converts `week_4/scripts/torch/NODE_adjoint_example.py` into an interactive didactical notebook.
 
     **Navigation:** [Jump to Control Panel](#control-panel)
     """)
@@ -40,89 +40,197 @@ def _():
 def _(mo):
     mo.md(r"""
     ---
-    ## 1. Discrete RK4 Dynamics and Adjoint Gradient
+    ## 1. Problem Formulation
 
-    True and learned systems:
+    We observe noisy pendulum trajectories and train a Neural ODE model.
 
-    $$x(t)=\begin{bmatrix}u(t)\\v(t)\end{bmatrix},\qquad
-    \dot{u}=v,\qquad
-    \dot{v}=-\beta v-\frac{g}{\ell}\sin(u),\qquad
-    \dot{x}=f_\theta(x).$$
+    Reference dynamics:
 
-    RK4 one-step map:
+    $$x(t)=\begin{bmatrix}u(t)\\v(t)\end{bmatrix},\quad
+    \dot{u}=v,\quad
+    \dot{v}=-\beta v-\frac{g}{\ell}\sin(u).$$
 
-    $$x_k=\Phi_\theta(x_{k-1}).$$
+    Learned dynamics:
 
-    Trajectory objective:
+    $$\frac{dx}{dt}=f_\theta(x),\qquad x(t_0)=x_0.$$
 
-    $$\mathcal{L}=\sum_{k=0}^{N}\ell(x_k),\qquad
-    \ell(x_k)=\|x_k^{\mathrm{sim}}-x_k^{\mathrm{obs}}\|_2^2.$$
+    Training objective:
 
-    Discrete adjoint recursion (backward in time):
+    $$\mathcal{L}(\theta)=\frac{1}{MN}\sum_{i=1}^{M}\sum_{k=0}^{N}\|x^i_k-\hat{x}^i_k\|_2^2 + \lambda R(\theta).$$
 
-    $$a_{k-1}=a_k\frac{\partial\Phi_\theta}{\partial x_{k-1}} + \frac{\partial\ell_{k-1}}{\partial x_{k-1}},
-    \qquad a_N=\frac{\partial\ell_N}{\partial x_N}.$$
+    Write the sampled loss as
 
-    Parameter gradient accumulation:
+    $$\mathcal{L}(\theta)=\sum_{k=0}^{N}\ell_k(x_k,\theta)+\lambda R(\theta),\qquad
+    \ell_k=\frac{1}{M}\sum_{i=1}^{M}\|x_k^i-\hat{x}_k^i\|_2^2.$$
 
-    $$\nabla_\theta \mathcal{L} = \sum_{k=1}^{N} a_k\frac{\partial\Phi_\theta}{\partial\theta}.$$
+    Instead of storing every solver operation like BPTT, the adjoint method tracks
+    two continuous sensitivity states:
 
-    The notebook implements this with a custom `torch.autograd.Function` that:
-    1. runs forward RK4 in `forward`,
-    2. replays a backward-time augmented system in `backward`.
+    $$\frac{da}{dt}=-(\nabla_x f_\theta)^\top a,\qquad
+    \frac{dg}{dt}=-(\nabla_\theta f_\theta)^\top a,\qquad
+    \nabla_\theta\mathcal{L}=g(t_0).$$
+
+    Boundary conditions for backward integration are
+
+    $$a(T)=\nabla_{x_N}\ell_N,\qquad g(T)=0.$$
+
+    For losses sampled at grid points, the state sensitivity receives jump updates:
+
+    $$a(t_k^-)=a(t_k^+)+\nabla_{x_k}\ell_k.$$
+
+    Over one interval, parameter-gradient accumulation is
+
+    $$g(t_{k-1})=g(t_k)+\int_{t_k}^{t_{k-1}}
+    -(\nabla_\theta f_\theta(x(t)))^\top a(t)\,dt.$$
+
+    Notation used in this notebook:
+
+    - $t$: continuous time, with $t_0$ (start), $T$ (end), and samples $t_k$.
+    - $x(t)\in\mathbb{R}^n$: state, $x_k\approx x(t_k)$ on the grid, $x_0=x(t_0)$.
+    - $f_\theta$: neural vector field with parameters $\theta\in\mathbb{R}^p$.
+    - $a(t)$: state sensitivity (adjoint), $g(t)$: parameter-gradient accumulator.
+    - $M$: number of trajectories, $N$: number of time steps.
+    - $\hat{x}_k^i$: observation for trajectory $i$ at index $k$.
+
+    Note: in the adjoint equations, $g(t)$ is a gradient accumulator; it is not
+    the pendulum gravity constant.
     """)
     return
 
 
 @app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 1.1 Initial condition sampler $x_0$
+
+    For each trajectory $i$:
+
+    $$u_0^i \sim \mathcal{U}[-0.5,0.5],\qquad
+    v_0^i \sim \mathcal{U}[-0.5,0.5],\qquad
+    x_0^i=[u_0^i,v_0^i]^\top.$$
+
+    Stacking all $x_0^i$ gives a batch of initial states.
+    """)
+    return
+
+
+@app.cell
 def _(torch):
     def sample_ic(n_traj, device):
         u0 = 0.5 * (2 * torch.rand(n_traj, device=device) - 1)
         v0 = 0.5 * (2 * torch.rand(n_traj, device=device) - 1)
         return torch.stack([u0, v0], dim=-1)
 
+    return (sample_ic,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 1.2 Reference dynamics $f(t,x)$
+
+    The data-generating physical dynamics is
+
+    $$x=[u,v]^\top,\quad \dot{u}=v,\quad \dot{v}=-\beta v-\frac{g}{\ell}\sin(u).$$
+
+    This defines the ground-truth trajectories used to create observations.
+    """)
+    return
+
+
+@app.cell
+def _(torch):
     def pendulum_rhs(x, beta, ell, g):
         u, v = x[..., 0], x[..., 1]
         du = v
         dv = -beta * v - (g / ell) * torch.sin(u)
         return torch.stack([du, dv], dim=-1)
 
-    def rk4_step_autonomous(f, x, dt):
-        k1 = f(x)
-        k2 = f(x + 0.5 * dt * k1)
-        k3 = f(x + 0.5 * dt * k2)
-        k4 = f(x + dt * k3)
-        return x + (dt / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
-
-    def rk4_integrate_autonomous(f, x0, t):
-        x = x0
-        xs = [x]
-        for k in range(t.shape[0] - 1):
-            dt = t[k + 1] - t[k]
-            x = rk4_step_autonomous(f, x, dt)
-            xs.append(x)
-        return torch.stack(xs, dim=0)
-
-    return pendulum_rhs, rk4_integrate_autonomous, sample_ic
+    return (pendulum_rhs,)
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 1.1 Code: Custom Adjoint Operator
+    ### 1.3 One RK4 step for autonomous ODEs
 
-    The next code cell builds:
+    For step size $h_k=t_{k+1}-t_k$, RK4 uses
 
-    $$\frac{da}{dt}=-a^\top\frac{\partial f_\theta}{\partial x},\qquad
-    \frac{d}{dt}\nabla_\theta\mathcal{L}=-a^\top\frac{\partial f_\theta}{\partial\theta},$$
+    $$k_1=f(x_k),\quad
+    k_2=f\!\left(x_k+\frac{h_k}{2}k_1\right),\quad
+    k_3=f\!\left(x_k+\frac{h_k}{2}k_2\right),\quad
+    k_4=f(x_k+h_k k_3),$$
 
-    and integrates this augmented backward system with RK4.
+    then updates
+
+    $$x_{k+1}=x_k+\frac{h_k}{6}(k_1+2k_2+2k_3+k_4).$$
+    """)
+    return
+
+
+@app.function
+def rk4_step_autonomous(f, x_k, h_k):
+    k1 = f(x_k)
+    k2 = f(x_k + 0.5 * h_k * k1)
+    k3 = f(x_k + 0.5 * h_k * k2)
+    k4 = f(x_k + h_k * k3)
+    return x_k + (h_k / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 1.4 RK4 rollout on the full grid
+
+    Repeating the one-step update for $k=0,\dots,N-1$ produces
+
+    $$X=[x_0, x_1, \dots, x_N].$$
+
+    These stored forward states are reused by the custom adjoint backward pass.
+    """)
+    return
+
+
+@app.cell
+def _(torch):
+    def rk4_integrate_autonomous(f, x0, t_grid):
+        x_k = x0
+        states = [x_k]
+        for k in range(t_grid.shape[0] - 1):
+            h_k = t_grid[k + 1] - t_grid[k]
+            x_k = rk4_step_autonomous(f, x_k, h_k)
+            states.append(x_k)
+        return torch.stack(states, dim=0)
+
+    return (rk4_integrate_autonomous,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 2. Adjoint Solver Components
+
+    We now define the neural vector field and the augmented adjoint dynamics used in `backward`.
     """)
     return
 
 
 @app.cell(hide_code=True)
-def _(nn, rk4_integrate_autonomous, torch):
+def _(mo):
+    mo.md(r"""
+    ### 2.1 Neural vector field module $f_\theta$
+
+    `ODEFunc` parameterizes
+
+    $$f_\theta:\mathbb{R}^n\to\mathbb{R}^n,\qquad \dot{x}=f_\theta(x).$$
+
+    Here $n=2$ (angle and angular velocity).
+    """)
+    return
+
+
+@app.cell
+def _(nn):
     class ODEFunc(nn.Module):
         def __init__(self, hidden_dim=128, use_he_init=True, device="cpu"):
             super().__init__()
@@ -133,6 +241,7 @@ def _(nn, rk4_integrate_autonomous, torch):
                 nn.ReLU(),
                 nn.Linear(hidden_dim, 2),
             ).to(device)
+
             if use_he_init:
                 for module in self.net:
                     if isinstance(module, nn.Linear):
@@ -143,12 +252,50 @@ def _(nn, rk4_integrate_autonomous, torch):
         def forward(self, x):
             return self.net(x)
 
-    def _augmented_dynamics(func, x, a, params):
+    return (ODEFunc,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 2.2 Augmented adjoint dynamics $(x,a,g)$
+
+    Let
+
+    $$J_x(x,\theta)=\nabla_x f_\theta(x)\in\mathbb{R}^{n\times n},\qquad
+    J_\theta(x,\theta)=\nabla_\theta f_\theta(x).$$
+
+    For backward integration, we evaluate
+
+    $$\dot{x}=f_\theta(x),\qquad
+    \dot{a}=-J_x(x,\theta)^\top a,\qquad
+    \dot{g}=-J_\theta(x,\theta)^\top a.$$
+
+    In code we do not explicitly form $J_x$ or $J_\theta$. Instead, we compute
+    vector-Jacobian products:
+
+    $$\frac{\partial\langle -a,f_\theta(x)\rangle}{\partial x}
+    =-J_x^\top a,\qquad
+    \frac{\partial\langle -a,f_\theta(x)\rangle}{\partial \theta}
+    =-J_\theta^\top a.$$
+
+    In code, `torch.autograd.grad` computes these sensitivity products directly
+    (without manually building full Jacobian matrices), using `grad_outputs=-a`.
+
+    This function returns one augmented derivative tuple
+    $(\dot{x},\dot{a},\dot{g})$.
+    """)
+    return
+
+
+@app.cell
+def _(torch):
+    def augmented_dynamics(func, x, a, params):
         with torch.enable_grad():
             x_req = x.detach().requires_grad_(True)
-            f = func(x_req)
+            f_val = func(x_req)
             grads = torch.autograd.grad(
-                outputs=f,
+                outputs=f_val,
                 inputs=(x_req, *params),
                 grad_outputs=-a,
                 allow_unused=True,
@@ -157,60 +304,154 @@ def _(nn, rk4_integrate_autonomous, torch):
             )
 
         dadt = grads[0] if grads[0] is not None else torch.zeros_like(x_req)
-        dpdt = []
-        for g, p in zip(grads[1:], params):
-            dpdt.append(g if g is not None else torch.zeros_like(p))
-        return f.detach(), dadt.detach(), [item.detach() for item in dpdt]
+        dgdt = []
+        for grad_param, param in zip(grads[1:], params):
+            dgdt.append(grad_param if grad_param is not None else torch.zeros_like(param))
 
-    def _rk4_augmented_step(func, x, a, dt, params):
-        k1x, k1a, k1p = _augmented_dynamics(func, x, a, params)
-        k2x, k2a, k2p = _augmented_dynamics(func, x + 0.5 * dt * k1x, a + 0.5 * dt * k1a, params)
-        k3x, k3a, k3p = _augmented_dynamics(func, x + 0.5 * dt * k2x, a + 0.5 * dt * k2a, params)
-        k4x, k4a, k4p = _augmented_dynamics(func, x + dt * k3x, a + dt * k3a, params)
+        return f_val.detach(), dadt.detach(), [item.detach() for item in dgdt]
 
-        x_new = x + (dt / 6.0) * (k1x + 2 * k2x + 2 * k3x + k4x)
-        a_new = a + (dt / 6.0) * (k1a + 2 * k2a + 2 * k3a + k4a)
-        grad_params = []
+    return (augmented_dynamics,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 2.3 RK4 step for the augmented system
+
+    We apply RK4 simultaneously to all augmented states:
+
+    $$(x,a,g)_{k+1}=(x,a,g)_k+\frac{h_k}{6}
+    \Big(K_1+2K_2+2K_3+K_4\Big),$$
+
+    where each $K_j$ contains the derivatives for $(x,a,g)$ at the corresponding RK4 stage.
+
+    In backward time, each step size is
+
+    $$h_k=t_{k-1}-t_k<0,$$
+
+    so integrating with RK4 naturally moves from $t_k$ to $t_{k-1}$.
+
+    The per-interval parameter-gradient contribution is the RK4 approximation of
+
+    $$\Delta g_k\approx\int_{t_k}^{t_{k-1}}-(\nabla_\theta f_\theta)^\top a\,dt,$$
+
+    which the code adds to `grad_params`.
+    """)
+    return
+
+
+@app.cell
+def _(augmented_dynamics):
+    def rk4_augmented_step(func, x, a, h_k, params):
+        k1x, k1a, k1g = augmented_dynamics(func, x, a, params)
+        k2x, k2a, k2g = augmented_dynamics(func, x + 0.5 * h_k * k1x, a + 0.5 * h_k * k1a, params)
+        k3x, k3a, k3g = augmented_dynamics(func, x + 0.5 * h_k * k2x, a + 0.5 * h_k * k2a, params)
+        k4x, k4a, k4g = augmented_dynamics(func, x + h_k * k3x, a + h_k * k3a, params)
+
+        x_next = x + (h_k / 6.0) * (k1x + 2 * k2x + 2 * k3x + k4x)
+        a_next = a + (h_k / 6.0) * (k1a + 2 * k2a + 2 * k3a + k4a)
+
+        g_next = []
         for j in range(len(params)):
-            grad_params.append((dt / 6.0) * (k1p[j] + 2 * k2p[j] + 2 * k3p[j] + k4p[j]))
-        return x_new, a_new, grad_params
+            g_next.append((h_k / 6.0) * (k1g[j] + 2 * k2g[j] + 2 * k3g[j] + k4g[j]))
 
+        return x_next, a_next, g_next
+
+    return (rk4_augmented_step,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 2.4 Custom autograd operator with adjoint backward pass
+
+    `forward`:
+
+    - integrates the forward ODE trajectory,
+    - stores $(t_k, x_k)$ for replay in reverse time.
+
+    `backward`:
+
+    1. starts from terminal sensitivity $a_N=\partial\mathcal{L}/\partial x_N$,
+    2. integrates the augmented dynamics from $t_N$ to $t_0$,
+    3. accumulates parameter gradient contributions into $g$,
+    4. applies discrete jump corrections:
+
+    $$a_{k-1}=a_{k-1}^{\text{int}} + \nabla_{x_{k-1}}\ell_{k-1}.$$
+
+    Exact mapping to code variables:
+
+    - `grad_y[k]` is $\partial\mathcal{L}/\partial x_k$ from PyTorch's chain rule.
+    - `a = grad_y[-1]` initializes $a_N$.
+    - one backward interval computes $(a_{k-1}^{\text{int}}, \Delta g_k)$ via `rk4_augmented_step`.
+    - `grad_params += g_step` accumulates $\sum_k \Delta g_k \approx g(t_0)$.
+    - `a = a + grad_y[k-1]` applies the jump at $t_{k-1}$.
+
+    So the returned parameter gradients are exactly the adjoint estimate of
+    $\nabla_\theta\mathcal{L}$, and `grad_x0` is $\partial\mathcal{L}/\partial x_0$.
+    """)
+    return
+
+
+@app.cell
+def _(rk4_augmented_step, rk4_integrate_autonomous, torch):
     class ODEAdjointRK4(torch.autograd.Function):
         @staticmethod
-        def forward(ctx, x0, t, func, *params):
+        def forward(ctx, x0, t_grid, func, *params):
             with torch.no_grad():
-                y = rk4_integrate_autonomous(lambda x: func(x), x0, t)
+                y = rk4_integrate_autonomous(lambda x: func(x), x0, t_grid)
             ctx.func = func
-            ctx.save_for_backward(t, y, *params)
+            ctx.save_for_backward(t_grid, y, *params)
             return y
 
         @staticmethod
         def backward(ctx, grad_y):
-            t, y, *params = ctx.saved_tensors
+            t_grid, y, *params = ctx.saved_tensors
             func = ctx.func
 
-            grad_params = [torch.zeros_like(p) for p in params]
+            grad_params = [torch.zeros_like(param) for param in params]
             a = grad_y[-1]
 
-            for i in range(t.shape[0] - 1, 0, -1):
-                dt = t[i - 1] - t[i]
-                x_i = y[i]
-                _, a, gp = _rk4_augmented_step(func, x_i, a, dt, params)
+            for k in range(t_grid.shape[0] - 1, 0, -1):
+                h_k = t_grid[k - 1] - t_grid[k]
+                x_k = y[k]
+                _, a, g_step = rk4_augmented_step(func, x_k, a, h_k, params)
+
                 for j in range(len(grad_params)):
-                    grad_params[j] = grad_params[j] + gp[j]
-                a = a + grad_y[i - 1]
+                    grad_params[j] = grad_params[j] + g_step[j]
+
+                a = a + grad_y[k - 1]
 
             grad_x0 = a
             return grad_x0, None, None, *grad_params
 
+    return (ODEAdjointRK4,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 2.5 Neural ODE wrapper using the custom adjoint
+
+    `NeuralODEAdjoint` wraps the custom operator behind the standard NODE API:
+
+    $$X = \mathrm{ODESolve}(f_\theta, x_0, \{t_k\}_{k=0}^{N}).$$
+
+    So training code can stay identical to standard PyTorch modules.
+    """)
+    return
+
+
+@app.cell
+def _(ODEAdjointRK4, ODEFunc, nn):
     class NeuralODEAdjoint(nn.Module):
         def __init__(self, hidden_dim=128, use_he_init=True, device="cpu"):
             super().__init__()
             self.func = ODEFunc(hidden_dim=hidden_dim, use_he_init=use_he_init, device=device)
 
-        def forward(self, x0, t):
+        def forward(self, x0, t_grid):
             params = tuple(self.func.parameters())
-            return ODEAdjointRK4.apply(x0, t, self.func, *params)
+            return ODEAdjointRK4.apply(x0, t_grid, self.func, *params)
 
     return (NeuralODEAdjoint,)
 
@@ -218,27 +459,146 @@ def _(nn, rk4_integrate_autonomous, torch):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 1.2 Code: Training Objective and Optimization
+    ## 3. Data, Loss Terms, and Training
 
-    We optimize:
-
-    $$\mathcal{L}=\mathcal{L}_{\mathrm{data}}+\lambda\mathcal{R},\qquad
-    \mathcal{R}=\frac{1}{\operatorname{mean}\|f_\theta(x)\|_2+\varepsilon},$$
-
-    with Adam, optional weight decay, clipping, and plateau LR scheduling.
+    This section builds $\mathcal{D}$, computes $\mathcal{L}$, and optimizes $\theta$ using
+    gradients supplied by the custom adjoint `backward`.
     """)
     return
 
 
 @app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 3.1 Dataset builder $\mathcal{D}$
+
+    We generate synthetic supervised trajectories:
+
+    $$x_{k}^i=\Phi_{t_0\to t_k}(x_0^i),\qquad
+    \hat{x}_{k}^i=x_k^i+\eta_k^i.$$
+
+    The resulting dataset is
+
+    $$\mathcal{D}=\Big\{\big(\{(t_k,\hat{x}_k^i)\}_{k=0}^{N},x_0^i\big)\Big\}_{i=1}^{M}.$$
+    """)
+    return
+
+
+@app.cell
+def _(pendulum_rhs, rk4_integrate_autonomous, sample_ic, torch):
+    def make_observation_dataset(g_true, beta_true, ell_true, t_final, n_steps, n_traj, noise_std, device):
+        t_grid = torch.linspace(0.0, t_final, n_steps, device=device)
+        x0_batch = sample_ic(n_traj, device)
+
+        with torch.no_grad():
+            x_true = rk4_integrate_autonomous(
+                lambda x: pendulum_rhs(x, beta_true, ell_true, g_true),
+                x0_batch,
+                t_grid,
+            )
+
+        x_obs = (x_true + noise_std * torch.randn_like(x_true)).detach()
+        return t_grid, x0_batch, x_true, x_obs
+
+    return (make_observation_dataset,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 3.2 Observation normalization
+
+    We normalize with empirical observation statistics:
+
+    $$\tilde{x}=\frac{x-\mu_{\hat{x}}}{\sigma_{\hat{x}}+\varepsilon}.$$
+
+    Inference outputs are later rescaled to compare against physical-space trajectories.
+    """)
+    return
+
+
+@app.function
+def compute_normalization_stats(x0_batch, x_obs):
+    x_obs_mean = x_obs.mean(dim=[0, 1], keepdim=True)
+    x_obs_std = x_obs.std(dim=[0, 1], keepdim=True) + 1e-6
+    x0_train = (x0_batch - x_obs_mean[0]) / x_obs_std[0]
+    return x_obs_mean, x_obs_std, x0_train
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 3.3 Optional regularization term
+
+    Data term:
+
+    $$\mathcal{L}_{\text{data}}=
+    \frac{1}{MN}\sum_{i=1}^M\sum_{k=0}^{N}\|x_k^i-\hat{x}_k^i\|_2^2.$$
+
+    Regularizer:
+
+    $$R(\theta)=\frac{1}{\operatorname{mean}\|f_\theta(x)\|_2+\varepsilon},\qquad
+    \mathcal{L}=\mathcal{L}_{\text{data}}+\lambda R(\theta).$$
+
+    Toggling regularization changes only the additive $\lambda R(\theta)$ term.
+    """)
+    return
+
+
+@app.cell
+def _(torch):
+    def derivative_regularization_term(vector_field, x_state, reg_strength, use_regularization):
+        if not use_regularization:
+            zero = torch.tensor(0.0, device=x_state.device)
+            nan_value = torch.tensor(float("nan"), device=x_state.device)
+            return zero, nan_value
+
+        mean_norm = torch.mean(torch.norm(vector_field(x_state), dim=-1))
+        reg_term = reg_strength * (1.0 / (mean_norm + 1e-6))
+        return reg_term, mean_norm
+
+    return (derivative_regularization_term,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 3.4 Training routine
+
+    Each epoch performs:
+
+    1. forward solve for all trajectories,
+    2. loss evaluation,
+    3. custom-adjoint backward pass,
+    4. optimizer/scheduler updates.
+
+    Parameter update:
+
+    $$\theta \leftarrow \theta - \alpha\,\nabla_\theta\mathcal{L}(\theta),$$
+
+    with optional weight decay and gradient clipping for stability.
+
+    Practical interpretation:
+    the adjoint method reduces memory usage by recomputing sensitivity dynamics
+    backward in time instead of storing all intermediate solver gradients.
+
+    In this notebook, `loss.backward()` triggers the custom adjoint `backward`,
+    which computes the parameter gradient through the sequence:
+
+    $$\text{forward solve} \;\rightarrow\; \text{adjoint backward solve}
+    \;\rightarrow\; \nabla_\theta\mathcal{L}.$$
+    """)
+    return
+
+
+@app.cell
 def _(
     NeuralODEAdjoint,
+    derivative_regularization_term,
+    make_observation_dataset,
     mo,
     nn,
     np,
-    pendulum_rhs,
-    rk4_integrate_autonomous,
-    sample_ic,
     torch,
 ):
     @mo.persistent_cache
@@ -270,25 +630,27 @@ def _(
         torch.manual_seed(seed)
         device = torch.device(device_type)
 
-        t_grid = torch.linspace(0.0, t_final, n_steps, device=device)
-        x0_batch = sample_ic(n_traj, device)
+        t_grid, x0_batch, x_true, x_obs = make_observation_dataset(
+            g_true=g_true,
+            beta_true=beta_true,
+            ell_true=ell_true,
+            t_final=t_final,
+            n_steps=n_steps,
+            n_traj=n_traj,
+            noise_std=noise_std,
+            device=device,
+        )
 
-        with torch.no_grad():
-            x_true = rk4_integrate_autonomous(
-                lambda x: pendulum_rhs(x, beta_true, ell_true, g_true),
-                x0_batch,
-                t_grid,
-            )
-
-        x_obs = (x_true + noise_std * torch.randn_like(x_true)).detach()
-        x_obs_mean = x_obs.mean(dim=[0, 1], keepdim=True)
-        x_obs_std = x_obs.std(dim=[0, 1], keepdim=True) + 1e-6
-        x0_batch_normalized = (x0_batch - x_obs_mean[0]) / x_obs_std[0]
+        x_obs_mean, x_obs_std, x0_train = compute_normalization_stats(
+            x0_batch=x0_batch,
+            x_obs=x_obs,
+        )
 
         model = NeuralODEAdjoint(hidden_dim=hidden_dim, use_he_init=use_he_init, device=device).to(device)
 
         wd = weight_decay if use_weight_decay else 0.0
         optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
+
         scheduler = None
         if use_scheduler:
             try:
@@ -317,16 +679,16 @@ def _(
         for epoch in range(epochs):
             optimizer.zero_grad()
 
-            x_sim = model(x0_batch_normalized, t_grid)
+            x_sim = model(x0_train, t_grid)
             x_sim_rescaled = x_sim * x_obs_std + x_obs_mean
             mse_loss = mse(x_sim_rescaled, x_obs)
 
-            if use_regularization:
-                deriv_norm = torch.mean(torch.norm(model.func.net(x_sim), dim=-1))
-                reg_term = reg_strength * (1.0 / (deriv_norm + 1e-6))
-            else:
-                deriv_norm = torch.tensor(float("nan"), device=device)
-                reg_term = torch.tensor(0.0, device=device)
+            reg_term, deriv_norm = derivative_regularization_term(
+                vector_field=model.func.net,
+                x_state=x_sim,
+                reg_strength=reg_strength,
+                use_regularization=use_regularization,
+            )
 
             loss = mse_loss + reg_term
             if not torch.isfinite(loss):
@@ -334,9 +696,12 @@ def _(
                 break
 
             loss.backward()
+
             if use_grad_clip:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=clip_norm)
+
             optimizer.step()
+
             if scheduler is not None:
                 scheduler.step(mse_loss.detach())
 
@@ -355,7 +720,7 @@ def _(
                 )
 
         with torch.no_grad():
-            x_fit = model(x0_batch_normalized, t_grid)
+            x_fit = model(x0_train, t_grid)
             x_fit = x_fit * x_obs_std + x_obs_mean
             final_clean_mse = mse(x_fit, x_true).item()
 
@@ -379,12 +744,13 @@ def _(
 def _(mo):
     mo.md(r"""
     <a id="control-panel"></a>
-    ## 3. Control Panel
+    ## 4. Control Panel
 
-    Defaults mirror the script-level adjoint setup: normalized data, scheduler, clipping,
-    weight decay, and regularization are all available with practical starting values.
+    Defaults mirror the adjoint script setup: normalization, scheduler, clipping,
+    weight decay, and regularization start enabled.
 
     For a simpler baseline, disable regularization and scheduler first, then re-enable progressively.
+    Use $N$ and $M$ to trade computational cost vs. trajectory fidelity.
     """)
     return
 
@@ -569,7 +935,7 @@ def _(
 def _(mo):
     mo.md("""
     ---
-    ## 4. Results
+    ## 5. Results
     """)
     return
 
@@ -598,88 +964,122 @@ def _(mo, results, use_regularization):
 
 
 @app.cell(hide_code=True)
-def _(np, plot_count_slider, plt, results):
-    def _():
-        def _():
-            def _():
-                t = results["t_grid"]
-                x_true = results["x_true"]
-                x_fit = results["x_fit"]
+def _(mo):
+    mo.md(r"""
+    ### 5.1 Trajectory comparison
 
-                n_plot = min(int(plot_count_slider.value), x_true.shape[1])
-                idx = np.arange(n_plot)
+    For selected trajectories, the plots show:
 
-                fig, axes = plt.subplots(3, n_plot, figsize=(5 * n_plot, 11), sharex=True, squeeze=False)
-                for i, k in enumerate(idx):
-                    axes[0, i].plot(t, x_true[:, k, 0], "k-", label="True angle")
-                    axes[0, i].plot(t, x_fit[:, k, 0], "r--", label="Adjoint NODE angle")
-                    axes[0, i].set_ylabel("u(t)")
-                    axes[0, i].set_title(f"Trajectory {k + 1}: angle")
-                    axes[0, i].grid(True, alpha=0.3)
-                    axes[0, i].legend()
-
-                    axes[1, i].plot(t, x_true[:, k, 1], "k-", label="True velocity")
-                    axes[1, i].plot(t, x_fit[:, k, 1], "r--", label="Adjoint NODE velocity")
-                    axes[1, i].set_ylabel("v(t)")
-                    axes[1, i].set_title(f"Trajectory {k + 1}: velocity")
-                    axes[1, i].grid(True, alpha=0.3)
-                    axes[1, i].legend()
-
-                    err_u = x_fit[:, k, 0] - x_true[:, k, 0]
-                    err_v = x_fit[:, k, 1] - x_true[:, k, 1]
-                    axes[2, i].plot(t, err_u, "m-", label="u error")
-                    axes[2, i].plot(t, err_v, "g--", label="v error")
-                    axes[2, i].axhline(0.0, color="k", linewidth=1.0, alpha=0.5)
-                    axes[2, i].set_xlabel("Time")
-                    axes[2, i].set_ylabel("Error")
-                    axes[2, i].set_title(f"Trajectory {k + 1}: state error")
-                    axes[2, i].grid(True, alpha=0.3)
-                    axes[2, i].legend()
-
-                plt.tight_layout()
-                return fig
-            return _()
-        return _()
+    - $u_k$ and $v_k$ reference vs prediction,
+    - component errors
+      $e_u(t_k)=u_k^{\text{pred}}-\hat{u}_k$ and
+      $e_v(t_k)=v_k^{\text{pred}}-\hat{v}_k$.
+    """)
+    return
 
 
-    _()
+@app.cell
+def _(np, plt):
+    def plot_trajectory_comparison(results, n_plot):
+        t = results["t_grid"]
+        x_true = results["x_true"]
+        x_fit = results["x_fit"]
+
+        n_plot = min(int(n_plot), x_true.shape[1])
+        idx = np.arange(n_plot)
+
+        fig, axes = plt.subplots(3, n_plot, figsize=(5 * n_plot, 11), sharex=True, squeeze=False)
+        for i, k in enumerate(idx):
+            axes[0, i].plot(t, x_true[:, k, 0], "k-", label="True angle")
+            axes[0, i].plot(t, x_fit[:, k, 0], "r--", label="Adjoint NODE angle")
+            axes[0, i].set_ylabel("u(t)")
+            axes[0, i].set_title(f"Trajectory {k + 1}: angle")
+            axes[0, i].grid(True, alpha=0.3)
+            axes[0, i].legend()
+
+            axes[1, i].plot(t, x_true[:, k, 1], "k-", label="True velocity")
+            axes[1, i].plot(t, x_fit[:, k, 1], "r--", label="Adjoint NODE velocity")
+            axes[1, i].set_ylabel("v(t)")
+            axes[1, i].set_title(f"Trajectory {k + 1}: velocity")
+            axes[1, i].grid(True, alpha=0.3)
+            axes[1, i].legend()
+
+            err_u = x_fit[:, k, 0] - x_true[:, k, 0]
+            err_v = x_fit[:, k, 1] - x_true[:, k, 1]
+            axes[2, i].plot(t, err_u, "m-", label="u error")
+            axes[2, i].plot(t, err_v, "g--", label="v error")
+            axes[2, i].axhline(0.0, color="k", linewidth=1.0, alpha=0.5)
+            axes[2, i].set_xlabel("Time")
+            axes[2, i].set_ylabel("Error")
+            axes[2, i].set_title(f"Trajectory {k + 1}: state error")
+            axes[2, i].grid(True, alpha=0.3)
+            axes[2, i].legend()
+
+        plt.tight_layout()
+        return fig
+
+    return (plot_trajectory_comparison,)
+
+
+@app.cell(hide_code=True)
+def _(plot_count_slider, plot_trajectory_comparison, results):
+    plot_trajectory_comparison(results, plot_count_slider.value)
     return
 
 
 @app.cell(hide_code=True)
-def _(np, plt, results):
-    def _():
-        def _():
-            total_hist = results["total_history"]
-            mse_hist = results["mse_history"]
-            reg_hist = results["reg_history"]
-            lr_hist = results["lr_history"]
+def _(mo):
+    mo.md(r"""
+    ### 5.2 Optimization history
 
-            fig, axes = plt.subplots(1, 2, figsize=(13, 4.5))
+    We monitor the optimization path across epochs:
 
-            epochs = np.arange(1, len(total_hist) + 1)
-            axes[0].plot(epochs, total_hist, label="Total loss", color="tab:blue")
-            axes[0].plot(epochs, mse_hist, label="MSE loss", color="tab:orange")
-            axes[0].plot(epochs, reg_hist, label="Reg term", color="tab:green")
-            axes[0].set_yscale("log")
-            axes[0].set_xlabel("Epoch")
-            axes[0].set_ylabel("Loss")
-            axes[0].set_title("Loss curves")
-            axes[0].grid(True, alpha=0.3)
-            axes[0].legend()
+    - $\mathcal{L}$ (total),
+    - $\mathcal{L}_{\text{data}}$,
+    - $\lambda R(\theta)$,
+    - learning rate schedule.
 
-            axes[1].plot(epochs, lr_hist, color="tab:red")
-            axes[1].set_xlabel("Epoch")
-            axes[1].set_ylabel("Learning rate")
-            axes[1].set_title("Learning rate schedule")
-            axes[1].grid(True, alpha=0.3)
-
-            plt.tight_layout()
-            return fig
-        return _()
+    The log-scale y-axis reveals both early transients and late fine-tuning.
+    """)
+    return
 
 
-    _()
+@app.cell
+def _(np, plt):
+    def plot_loss_curves(results):
+        total_hist = results["total_history"]
+        mse_hist = results["mse_history"]
+        reg_hist = results["reg_history"]
+        lr_hist = results["lr_history"]
+
+        fig, axes = plt.subplots(1, 2, figsize=(13, 4.5))
+
+        epochs = np.arange(1, len(total_hist) + 1)
+        axes[0].plot(epochs, total_hist, label="Total loss", color="tab:blue")
+        axes[0].plot(epochs, mse_hist, label="MSE loss", color="tab:orange")
+        axes[0].plot(epochs, reg_hist, label="Reg term", color="tab:green")
+        axes[0].set_yscale("log")
+        axes[0].set_xlabel("Epoch")
+        axes[0].set_ylabel("Loss")
+        axes[0].set_title("Loss curves")
+        axes[0].grid(True, alpha=0.3)
+        axes[0].legend()
+
+        axes[1].plot(epochs, lr_hist, color="tab:red")
+        axes[1].set_xlabel("Epoch")
+        axes[1].set_ylabel("Learning rate")
+        axes[1].set_title("Learning rate schedule")
+        axes[1].grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        return fig
+
+    return (plot_loss_curves,)
+
+
+@app.cell(hide_code=True)
+def _(plot_loss_curves, results):
+    plot_loss_curves(results)
     return
 
 

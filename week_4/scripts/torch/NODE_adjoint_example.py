@@ -1,33 +1,23 @@
-# Neural ODE training with a pure-PyTorch adjoint gradient example (RK4 solver)
-import os
-from pathlib import Path
+import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
-import matplotlib.pyplot as plt
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-SEED = int(os.getenv("SEED", "0"))
-torch.manual_seed(SEED)
-SCRIPT_DIR = Path(__file__).resolve().parent
-OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", str(SCRIPT_DIR)))
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-SHOW_PLOT = os.getenv("SHOW_PLOT", "1") == "1"
-PLOT_COUNT = int(os.getenv("PLOT_COUNT", "3"))
 
-
-# -----------------------------
-# 1) Problem setup and data gen
-# -----------------------------
-g_true = float(os.getenv("G_TRUE", "9.81"))
-beta_true = float(os.getenv("BETA_TRUE", "0.25"))
-ell_true = float(os.getenv("ELL_TRUE", "0.9"))
-
-T = float(os.getenv("T_FINAL", "5.0"))
-N = int(os.getenv("N_STEPS", "200"))
-M = int(os.getenv("N_TRAJ", "32"))
-noise_std = float(os.getenv("NOISE_STD", "0.01"))
-t_grid = torch.linspace(0.0, T, N, device=device)
+G_TRUE = 9.81
+BETA_TRUE = 0.25
+ELL_TRUE = 0.9
+T = 5.0
+N = 200
+M = 32
+NOISE_STD = 0.01
+HIDDEN_DIM = 128
+LR = 1e-2
+WEIGHT_DECAY = 1e-4
+NUM_EPOCHS = 1000
+PRINT_EVERY = 100
+PLOT_COUNT = 3
 
 
 def sample_ic(num_traj: int) -> torch.Tensor:
@@ -38,9 +28,7 @@ def sample_ic(num_traj: int) -> torch.Tensor:
 
 def pendulum_rhs(x: torch.Tensor, beta: float, ell: float, g: float = 9.81) -> torch.Tensor:
     u, v = x[..., 0], x[..., 1]
-    du = v
-    dv = -beta * v - (g / ell) * torch.sin(u)
-    return torch.stack([du, dv], dim=-1)
+    return torch.stack([v, -beta * v - (g / ell) * torch.sin(u)], dim=-1)
 
 
 def rk4_step_autonomous(f, x: torch.Tensor, dt: torch.Tensor) -> torch.Tensor:
@@ -61,22 +49,8 @@ def rk4_integrate_autonomous(f, x0: torch.Tensor, t: torch.Tensor) -> torch.Tens
     return torch.stack(xs, dim=0)
 
 
-x0_batch = sample_ic(M)
-with torch.no_grad():
-    x_true = rk4_integrate_autonomous(
-        lambda x: pendulum_rhs(x, beta_true, ell_true, g_true), x0_batch, t_grid
-    )
-x_obs = (x_true + noise_std * torch.randn_like(x_true)).detach()
-x_obs_mean = x_obs.mean(dim=[0, 1], keepdim=True)
-x_obs_std = x_obs.std(dim=[0, 1], keepdim=True) + 1e-6
-x0_batch_normalized = (x0_batch - x_obs_mean[0]) / x_obs_std[0]
-
-
-# -----------------------------
-# 2) Neural vector field
-# -----------------------------
 class ODEFunc(nn.Module):
-    def __init__(self, hidden_dim: int = 128):
+    def __init__(self, hidden_dim: int = HIDDEN_DIM):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(2, hidden_dim),
@@ -96,10 +70,6 @@ class ODEFunc(nn.Module):
 
 
 def _augmented_dynamics(func, x: torch.Tensor, a: torch.Tensor, params):
-    # Returns:
-    #   dx/dt = f(x)
-    #   da/dt = -a^T df/dx
-    #   dp/dt = -a^T df/dp
     with torch.enable_grad():
         x_req = x.detach().requires_grad_(True)
         f = func(x_req)
@@ -113,20 +83,14 @@ def _augmented_dynamics(func, x: torch.Tensor, a: torch.Tensor, params):
         )
 
     dadt = grads[0] if grads[0] is not None else torch.zeros_like(x_req)
-    dpdt = []
-    for g, p in zip(grads[1:], params):
-        dpdt.append(g if g is not None else torch.zeros_like(p))
+    dpdt = [g if g is not None else torch.zeros_like(p) for g, p in zip(grads[1:], params)]
     return f.detach(), dadt.detach(), [g.detach() for g in dpdt]
 
 
 def _rk4_augmented_step(func, x: torch.Tensor, a: torch.Tensor, dt: torch.Tensor, params):
     k1x, k1a, k1p = _augmented_dynamics(func, x, a, params)
-    k2x, k2a, k2p = _augmented_dynamics(
-        func, x + 0.5 * dt * k1x, a + 0.5 * dt * k1a, params
-    )
-    k3x, k3a, k3p = _augmented_dynamics(
-        func, x + 0.5 * dt * k2x, a + 0.5 * dt * k2a, params
-    )
+    k2x, k2a, k2p = _augmented_dynamics(func, x + 0.5 * dt * k1x, a + 0.5 * dt * k1a, params)
+    k3x, k3a, k3p = _augmented_dynamics(func, x + 0.5 * dt * k2x, a + 0.5 * dt * k2a, params)
     k4x, k4a, k4p = _augmented_dynamics(func, x + dt * k3x, a + dt * k3a, params)
 
     x_new = x + (dt / 6.0) * (k1x + 2 * k2x + 2 * k3x + k4x)
@@ -156,18 +120,16 @@ class ODEAdjointRK4(torch.autograd.Function):
 
         for i in range(t.shape[0] - 1, 0, -1):
             dt = t[i - 1] - t[i]
-            x_i = y[i]
-            _, a, gp = _rk4_augmented_step(func, x_i, a, dt, params)
+            _, a, gp = _rk4_augmented_step(func, y[i], a, dt, params)
             for j in range(len(grad_params)):
                 grad_params[j] = grad_params[j] + gp[j]
             a = a + grad_y[i - 1]
 
-        grad_x0 = a
-        return grad_x0, None, None, *grad_params
+        return a, None, None, *grad_params
 
 
 class NeuralODEAdjoint(nn.Module):
-    def __init__(self, hidden_dim: int = 128):
+    def __init__(self, hidden_dim: int = HIDDEN_DIM):
         super().__init__()
         self.func = ODEFunc(hidden_dim=hidden_dim)
 
@@ -176,89 +138,26 @@ class NeuralODEAdjoint(nn.Module):
         return ODEAdjointRK4.apply(x0, t, self.func, *params)
 
 
-model = NeuralODEAdjoint(hidden_dim=int(os.getenv("HIDDEN_DIM", "128"))).to(device)
-
-
-# -----------------------------
-# 3) Training
-# -----------------------------
-learning_rate = float(os.getenv("LR", "1e-2"))
-weight_decay = float(os.getenv("WEIGHT_DECAY", "1e-4"))
-optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-try:
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=100, verbose=True
-    )
-except TypeError:
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=100
-    )
-mse = nn.MSELoss()
-num_epochs = int(os.getenv("NUM_EPOCHS", "1000"))
-print_every = int(os.getenv("PRINT_EVERY", "100"))
-print(
-    f"config: seed={SEED} g={g_true} beta={beta_true} ell={ell_true} "
-    f"T={T} N={N} M={M} noise={noise_std} hidden={int(os.getenv('HIDDEN_DIM', '128'))} "
-    f"lr={learning_rate} wd={weight_decay} epochs={num_epochs}"
-)
-
-
 def compute_derivative_norm(model_ref: NeuralODEAdjoint, x_sim: torch.Tensor) -> torch.Tensor:
     with torch.enable_grad():
         x_eval = x_sim.clone().requires_grad_(True)
         dx_dt = model_ref.func.net(x_eval)
         return torch.mean(torch.norm(dx_dt, dim=-1))
 
-for epoch in range(num_epochs):
-    optimizer.zero_grad()
-    x_sim = model(x0_batch_normalized, t_grid)
-    x_sim_rescaled = x_sim * x_obs_std + x_obs_mean
-    mse_loss = mse(x_sim_rescaled, x_obs)
-    deriv_norm = compute_derivative_norm(model, x_sim)
-    penalty = 0.01 * (1.0 / (deriv_norm + 1e-6))
-    loss = mse_loss + penalty
-    if not torch.isfinite(loss):
-        print(f"[{epoch:04d}] loss became non-finite; stopping early")
-        break
-    loss.backward()
-    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-    optimizer.step()
-    scheduler.step(mse_loss.detach())
-
-    if epoch % print_every == 0:
-        print(
-            f"[{epoch:04d}] mse_loss={mse_loss.item():.6f}  "
-            f"deriv_norm={deriv_norm.item():.6f}  lr={optimizer.param_groups[0]['lr']:.6f}"
-        )
-
-
-# -----------------------------
-# 4) Evaluation and plot
-# -----------------------------
-with torch.no_grad():
-    x_fit = model(x0_batch_normalized, t_grid)
-    x_fit = x_fit * x_obs_std + x_obs_mean
-    final_mse = mse(x_fit, x_true).item()
-print(f"final_clean_mse={final_mse:.6f}")
-
 
 def plot_trajectories(
-    t,
-    x_ref,
-    x_pred,
+    t: torch.Tensor,
+    x_ref: torch.Tensor,
+    x_pred: torch.Tensor,
     num_trajectories: int = PLOT_COUNT,
-    save_dir=OUTPUT_DIR,
-    save_name="NODE_adjoint_example_plot.png",
-    show_plot=SHOW_PLOT,
-):
+    save_name: str = "NODE_adjoint_example_plot.png",
+) -> None:
     t_np = t.cpu().numpy()
     x_ref_np = x_ref.cpu().numpy()
     x_pred_np = x_pred.cpu().numpy()
     idx = torch.arange(min(num_trajectories, x_ref.shape[1])).cpu().numpy()
 
-    fig, axes = plt.subplots(
-        3, num_trajectories, figsize=(5 * num_trajectories, 11), sharex=True, squeeze=False
-    )
+    fig, axes = plt.subplots(3, len(idx), figsize=(5 * len(idx), 11), sharex=True, squeeze=False)
     for i, k in enumerate(idx):
         axes[0, i].plot(t_np, x_ref_np[:, k, 0], "k-", label="True u")
         axes[0, i].plot(t_np, x_pred_np[:, k, 0], "r--", label="Adjoint NODE u")
@@ -271,31 +170,64 @@ def plot_trajectories(
         axes[1, i].grid(True, alpha=0.3)
         axes[1, i].legend()
 
-        err_u = x_pred_np[:, k, 0] - x_ref_np[:, k, 0]
-        err_v = x_pred_np[:, k, 1] - x_ref_np[:, k, 1]
-        axes[2, i].plot(t_np, err_u, "m-", label="Error u_hat - u")
-        axes[2, i].plot(t_np, err_v, "g--", label="Error v_hat - v")
+        axes[2, i].plot(t_np, x_pred_np[:, k, 0] - x_ref_np[:, k, 0], "m-", label="u error")
+        axes[2, i].plot(t_np, x_pred_np[:, k, 1] - x_ref_np[:, k, 1], "g--", label="v error")
         axes[2, i].axhline(0.0, color="k", linewidth=1.0, alpha=0.5)
         axes[2, i].set_xlabel("Time (s)")
-        axes[2, i].set_ylabel("State Error")
-        axes[2, i].set_title(f"Trajectory {k}: Error")
+        axes[2, i].set_title(f"Trajectory {k}: error")
         axes[2, i].grid(True, alpha=0.3)
         axes[2, i].legend()
 
     plt.tight_layout()
-    save_path = Path(save_dir) / save_name
-    fig.savefig(save_path, dpi=180, bbox_inches="tight")
-    print(f"saved_plot={save_path}")
-    if show_plot:
-        plt.show()
-    else:
-        plt.close(fig)
+    fig.savefig(save_name, dpi=180, bbox_inches="tight")
+    print(f"saved_plot={save_name}")
+    plt.show()
 
 
-plot_trajectories(
-    t_grid,
-    x_true,
-    x_fit,
-    num_trajectories=PLOT_COUNT,
-    show_plot=SHOW_PLOT,
-)
+t_grid = torch.linspace(0.0, T, N, device=device)
+x0_batch = sample_ic(M)
+with torch.no_grad():
+    x_true = rk4_integrate_autonomous(lambda x: pendulum_rhs(x, BETA_TRUE, ELL_TRUE, G_TRUE), x0_batch, t_grid)
+x_obs = (x_true + NOISE_STD * torch.randn_like(x_true)).detach()
+x_obs_mean = x_obs.mean(dim=[0, 1], keepdim=True)
+x_obs_std = x_obs.std(dim=[0, 1], keepdim=True) + 1e-6
+x0_batch_normalized = (x0_batch - x_obs_mean[0]) / x_obs_std[0]
+
+model = NeuralODEAdjoint(hidden_dim=HIDDEN_DIM).to(device)
+optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
+try:
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="min", factor=0.5, patience=100, verbose=True
+    )
+except TypeError:
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=100)
+mse = nn.MSELoss()
+
+for epoch in range(NUM_EPOCHS):
+    optimizer.zero_grad()
+    x_sim = model(x0_batch_normalized, t_grid)
+    x_sim_rescaled = x_sim * x_obs_std + x_obs_mean
+    mse_loss = mse(x_sim_rescaled, x_obs)
+    deriv_norm = compute_derivative_norm(model, x_sim)
+    loss = mse_loss + 0.01 * (1.0 / (deriv_norm + 1e-6))
+    if not torch.isfinite(loss):
+        print(f"[{epoch:04d}] loss became non-finite; stopping early")
+        break
+    loss.backward()
+    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+    optimizer.step()
+    scheduler.step(mse_loss.detach())
+
+    if epoch % PRINT_EVERY == 0:
+        print(
+            f"[{epoch:04d}] mse_loss={mse_loss.item():.6f} "
+            f"deriv_norm={deriv_norm.item():.6f} lr={optimizer.param_groups[0]['lr']:.6f}"
+        )
+
+with torch.no_grad():
+    x_fit = model(x0_batch_normalized, t_grid)
+    x_fit = x_fit * x_obs_std + x_obs_mean
+    final_mse = mse(x_fit, x_true).item()
+print(f"final_clean_mse={final_mse:.6f}")
+
+plot_trajectories(t_grid, x_true, x_fit, num_trajectories=PLOT_COUNT)

@@ -1,27 +1,29 @@
-import os
-from pathlib import Path
-
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
 
-SEED = int(os.getenv("SEED", "0"))
-SCRIPT_DIR = Path(__file__).resolve().parent
-OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", str(SCRIPT_DIR)))
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-SHOW_PLOT = os.getenv("SHOW_PLOT", "1") == "1"
-PLOT_COUNT = int(os.getenv("PLOT_COUNT", "3"))
-USE_JIT = os.getenv("USE_JIT", "1") == "1"
+SEED = 0
+USE_JIT = True
+G_TRUE = 9.81
+BETA_TRUE = 0.25
+ELL_TRUE = 0.9
+T_FINAL = 5.0
+N_STEPS = 200
+N_TRAJ = 32
+NOISE_STD = 0.01
+HIDDEN_DIM = 64
+LR = 5e-2
+NUM_EPOCHS = 501
+PRINT_EVERY = 100
+PLOT_COUNT = 3
 
 
 def pendulum_rhs(x: jnp.ndarray, beta: float, ell: float, g: float = 9.81) -> jnp.ndarray:
     u = x[..., 0]
     v = x[..., 1]
-    du = v
-    dv = -beta * v - (g / ell) * jnp.sin(u)
-    return jnp.stack([du, dv], axis=-1)
+    return jnp.stack([v, -beta * v - (g / ell) * jnp.sin(u)], axis=-1)
 
 
 def rk4_step(f, x: jnp.ndarray, dt: jnp.ndarray) -> jnp.ndarray:
@@ -126,76 +128,54 @@ def plot_trajectories(
     t_grid: jnp.ndarray,
     x_true: jnp.ndarray,
     x_fit: jnp.ndarray,
-    num_trajectories: int,
-    save_dir: Path,
-    save_name: str,
-    show_plot: bool,
-):
+    num_trajectories: int = PLOT_COUNT,
+    save_name: str = "NODE_BPTT_vanilla_plot.png",
+) -> None:
     t_np = np.asarray(t_grid)
     x_true_np = np.asarray(x_true)
     x_fit_np = np.asarray(x_fit)
     indices = np.arange(min(num_trajectories, x_true_np.shape[1]))
 
-    fig, axes = plt.subplots(
-        3, len(indices), figsize=(5 * len(indices), 11), sharex=True, squeeze=False
-    )
+    fig, axes = plt.subplots(3, len(indices), figsize=(5 * len(indices), 11), sharex=True, squeeze=False)
     for i, idx in enumerate(indices):
-        axes[0, i].plot(t_np, x_true_np[:, idx, 0], "b-", label="True Angle (u)")
-        axes[0, i].plot(t_np, x_fit_np[:, idx, 0], "r--", label="Fitted Angle (u)")
-        axes[0, i].set_xlabel("Time (s)")
-        axes[0, i].set_ylabel("Angle (rad)")
-        axes[0, i].set_title(f"Trajectory {idx + 1}: Angle")
-        axes[0, i].legend()
+        axes[0, i].plot(t_np, x_true_np[:, idx, 0], "b-", label="True u")
+        axes[0, i].plot(t_np, x_fit_np[:, idx, 0], "r--", label="NODE u")
+        axes[0, i].set_title(f"Trajectory {idx + 1}: u")
         axes[0, i].grid(True)
+        axes[0, i].legend()
 
-        axes[1, i].plot(t_np, x_true_np[:, idx, 1], "b-", label="True Angular Velocity (v)")
-        axes[1, i].plot(t_np, x_fit_np[:, idx, 1], "r--", label="Fitted Angular Velocity (v)")
-        axes[1, i].set_xlabel("Time (s)")
-        axes[1, i].set_ylabel("Angular Velocity (rad/s)")
-        axes[1, i].set_title(f"Trajectory {idx + 1}: Angular Velocity")
-        axes[1, i].legend()
+        axes[1, i].plot(t_np, x_true_np[:, idx, 1], "b-", label="True v")
+        axes[1, i].plot(t_np, x_fit_np[:, idx, 1], "r--", label="NODE v")
+        axes[1, i].set_title(f"Trajectory {idx + 1}: v")
         axes[1, i].grid(True)
+        axes[1, i].legend()
 
-        err_u = x_fit_np[:, idx, 0] - x_true_np[:, idx, 0]
-        err_v = x_fit_np[:, idx, 1] - x_true_np[:, idx, 1]
-        axes[2, i].plot(t_np, err_u, "m-", label="Error u_hat - u")
-        axes[2, i].plot(t_np, err_v, "g--", label="Error v_hat - v")
+        axes[2, i].plot(t_np, x_fit_np[:, idx, 0] - x_true_np[:, idx, 0], "m-", label="u error")
+        axes[2, i].plot(t_np, x_fit_np[:, idx, 1] - x_true_np[:, idx, 1], "g--", label="v error")
         axes[2, i].axhline(0.0, color="k", linewidth=1.0, alpha=0.5)
+        axes[2, i].set_title(f"Trajectory {idx + 1}: error")
         axes[2, i].set_xlabel("Time (s)")
-        axes[2, i].set_ylabel("State Error")
-        axes[2, i].set_title(f"Trajectory {idx + 1}: Error")
-        axes[2, i].legend()
         axes[2, i].grid(True)
+        axes[2, i].legend()
 
     plt.tight_layout()
-    save_path = save_dir / save_name
-    fig.savefig(save_path, dpi=180, bbox_inches="tight")
-    print(f"saved_plot={save_path}")
-    if show_plot:
-        plt.show()
-    else:
-        plt.close(fig)
+    fig.savefig(save_name, dpi=180, bbox_inches="tight")
+    print(f"saved_plot={save_name}")
+    plt.show()
 
 
-def main():
-    g_true = 9.81
-    beta_true = 0.25
-    ell_true = 0.9
-
-    t_final = float(os.getenv("T_FINAL", "5.0"))
-    n_steps = int(os.getenv("N_STEPS", "200"))
-    n_traj = int(os.getenv("N_TRAJ", "32"))
-    t_grid = jnp.linspace(0.0, t_final, n_steps)
+def main() -> None:
+    t_grid = jnp.linspace(0.0, T_FINAL, N_STEPS)
     print(f"backend={jax.default_backend()} devices={jax.devices()} jit={USE_JIT}")
 
     key = jax.random.PRNGKey(SEED)
     key_ic, key_noise, key_model = jax.random.split(key, 3)
 
-    x0_batch = sample_ic(key_ic, n_traj)
-    x_true = rk4_integrate(lambda x: pendulum_rhs(x, beta_true, ell_true, g_true), x0_batch, t_grid)
-    x_obs = x_true + 0.01 * jax.random.normal(key_noise, x_true.shape)
+    x0_batch = sample_ic(key_ic, N_TRAJ)
+    x_true = rk4_integrate(lambda x: pendulum_rhs(x, BETA_TRUE, ELL_TRUE, G_TRUE), x0_batch, t_grid)
+    x_obs = x_true + NOISE_STD * jax.random.normal(key_noise, x_true.shape)
 
-    params = init_mlp(key_model, hidden_dim=64)
+    params = init_mlp(key_model, hidden_dim=HIDDEN_DIM)
     state = adam_init(params)
 
     def simulate(curr_params, x0):
@@ -207,33 +187,23 @@ def main():
 
     def train_step(curr_params, curr_state):
         loss, grads = jax.value_and_grad(loss_fn)(curr_params)
-        next_params, next_state = adam_step(curr_params, grads, curr_state, lr=5e-2)
+        next_params, next_state = adam_step(curr_params, grads, curr_state, lr=LR)
         return next_params, next_state, loss
 
     if USE_JIT:
-        train_step = jax.jit(train_step)
+        train_step_jit = jax.jit(train_step)
         simulate_eval = jax.jit(simulate)
     else:
+        train_step_jit = train_step
         simulate_eval = simulate
 
-    num_epochs = int(os.getenv("NUM_EPOCHS", "501"))
-    print_every = int(os.getenv("PRINT_EVERY", "100"))
-
-    for epoch in range(num_epochs):
-        params, state, loss = train_step(params, state)
-        if epoch % print_every == 0:
+    for epoch in range(NUM_EPOCHS):
+        params, state, loss = train_step_jit(params, state)
+        if epoch % PRINT_EVERY == 0:
             print(f"[{epoch:04d}] loss={float(loss):.6f}")
 
     x_fit = simulate_eval(params, x0_batch)
-    plot_trajectories(
-        t_grid=t_grid,
-        x_true=x_true,
-        x_fit=x_fit,
-        num_trajectories=PLOT_COUNT,
-        save_dir=OUTPUT_DIR,
-        save_name="NODE_BPTT_vanilla_plot.png",
-        show_plot=SHOW_PLOT,
-    )
+    plot_trajectories(t_grid=t_grid, x_true=x_true, x_fit=x_fit, num_trajectories=PLOT_COUNT)
 
 
 if __name__ == "__main__":

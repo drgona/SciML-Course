@@ -1,241 +1,157 @@
-# Tuned PyTorch Neural ODE with a black-box neural network for a damped pendulum
-import math
-import os
-from pathlib import Path
+import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
-import matplotlib.pyplot as plt
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Use GPU if available, else CPU
-SEED = int(os.getenv("SEED", "0"))
-torch.manual_seed(SEED)  # Set random seed for reproducibility
-SCRIPT_DIR = Path(__file__).resolve().parent
-OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", str(SCRIPT_DIR)))
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-SHOW_PLOT = os.getenv("SHOW_PLOT", "1") == "1"
-PLOT_COUNT = int(os.getenv("PLOT_COUNT", "3"))
 
-# -----------------------------
-# 1) Problem setup and data gen
-# -----------------------------
-# State: x = [u, v] with u = angle (rad), v = angular velocity (rad/s)
-# Dynamics: du/dt = v, dv/dt = -beta * v - (g/ell) * sin(u) (but we'll learn this with a neural network)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-g_true     = 9.81   # True gravity constant (m/s^2)
-beta_true  = 0.25   # True damping coefficient
-ell_true   = 0.9    # True pendulum length (m)
+G_TRUE = 9.81
+BETA_TRUE = 0.25
+ELL_TRUE = 0.9
+T = 5.0
+N = 200
+M = 32
+NOISE_STD = 0.01
+HIDDEN_DIM = 128
+LR = 1e-2
+WEIGHT_DECAY = 1e-4
+NUM_EPOCHS = 1000
+PRINT_EVERY = 100
+PLOT_COUNT = 3
 
-# Time grid (shared across trajectories)
-T      = 5.0  # Total time (s)
-N      = 200  # Number of time steps
-t_grid = torch.linspace(0.0, T, N, device=device)  # Time grid [N]
-h      = t_grid[1] - t_grid[0]  # Time step size
 
-# Synthetic dataset: M trajectories with different initial conditions
-M = 32  # Number of trajectories
-def sample_ic(M):
-    # Generate random initial conditions for angle and angular velocity
-    u0 = 0.5 * (2*torch.rand(M, device=device)-1)   # Random angles ~ [-0.5, 0.5] rad
-    v0 = 0.5 * (2*torch.rand(M, device=device)-1)   # Random velocities ~ [-0.5, 0.5] rad/s
-    return torch.stack([u0, v0], dim=-1)  # Stack to [M, 2]
+def sample_ic(num_traj: int) -> torch.Tensor:
+    u0 = 0.5 * (2 * torch.rand(num_traj, device=device) - 1)
+    v0 = 0.5 * (2 * torch.rand(num_traj, device=device) - 1)
+    return torch.stack([u0, v0], dim=-1)
 
-x0_batch = sample_ic(M)  # Initial conditions for M trajectories [M,2]
 
-def pendulum_rhs(x, beta, ell, g=9.81):
-    # Analytical pendulum dynamics for ground truth
-    # x: [..., 2] -> returns [..., 2] (derivatives du/dt, dv/dt)
+def pendulum_rhs(x: torch.Tensor, beta: float, ell: float, g: float = 9.81) -> torch.Tensor:
     u, v = x[..., 0], x[..., 1]
-    du = v  # du/dt = v
-    dv = -beta * v - (g / ell) * torch.sin(u)  # dv/dt = -beta*v - (g/ell)*sin(u)
-    return torch.stack([du, dv], dim=-1)
+    return torch.stack([v, -beta * v - (g / ell) * torch.sin(u)], dim=-1)
 
-def rk4_integrate(f, x0, t, *f_args):
-    """
-    Runge-Kutta 4 for a batch of trajectories.
-    x0: [M,2], t: [N], returns x: [N,M,2]
-    Assumes shared time grid for the whole batch.
-    """
-    M = x0.shape[0]  # Number of trajectories
-    N = t.shape[0]   # Number of time steps
-    x = torch.zeros(N, M, 2, device=x0.device, dtype=x0.dtype)  # Initialize output tensor
-    x = x.clone()  # Create a fresh tensor to avoid inplace issues
-    x = torch.index_copy(x, 0, torch.tensor(0, device=x0.device), x0.unsqueeze(0))  # Set initial condition
 
-    for k in range(N-1):
-        h = t[k+1] - t[k]  # Time step
-        xk = x[k]  # Current state
-        k1 = f(xk, *f_args)  # RK4 stage 1
-        k2 = f(xk + 0.5*h*k1, *f_args)  # RK4 stage 2
-        k3 = f(xk + 0.5*h*k2, *f_args)  # RK4 stage 3
-        k4 = f(xk + h*k3, *f_args)  # RK4 stage 4
-        # Compute next step without inplace modification
-        x_next = xk + (h/6.0)*(k1 + 2*k2 + 2*k3 + k4)
-        x = torch.index_copy(x, 0, torch.tensor(k+1, device=x0.device), x_next.unsqueeze(0))
-    return x  # [N, M, 2]
+def rk4_integrate(f, x0: torch.Tensor, t: torch.Tensor, *f_args) -> torch.Tensor:
+    x = x0
+    xs = [x]
+    for k in range(t.shape[0] - 1):
+        dt = t[k + 1] - t[k]
+        k1 = f(x, *f_args)
+        k2 = f(x + 0.5 * dt * k1, *f_args)
+        k3 = f(x + 0.5 * dt * k2, *f_args)
+        k4 = f(x + dt * k3, *f_args)
+        x = x + (dt / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
+        xs.append(x)
+    return torch.stack(xs, dim=0)
 
-# Generate noise-free ground truth and add light noise
-with torch.no_grad():
-    x_true = rk4_integrate(lambda x, b, l: pendulum_rhs(x, b, l, g_true),
-                           x0_batch, t_grid, beta_true, ell_true)  # True trajectories [N,M,2]
-noise = 0.01 * torch.randn_like(x_true)  # Add Gaussian noise
-x_obs = (x_true + noise).detach()  # Observed trajectories [N,M,2]
 
-# Normalize data to zero mean and unit variance to stabilize training
-# Improvement: Data normalization helps handle different scales of u and v
-x_obs_mean = x_obs.mean(dim=[0, 1], keepdim=True)  # Compute mean over time and batch
-x_obs_std = x_obs.std(dim=[0, 1], keepdim=True) + 1e-6  # Compute std, add small constant to avoid division by zero
-x_obs_normalized = (x_obs - x_obs_mean) / x_obs_std  # Normalize observed data
-x0_batch_normalized = (x0_batch - x_obs_mean[0]) / x_obs_std[0]  # Normalize initial conditions
-
-# -----------------------------
-# 2) Black-box Neural ODE
-# -----------------------------
 class NeuralODE(nn.Module):
-    def __init__(self, hidden_dim=128):
+    def __init__(self, hidden_dim: int = HIDDEN_DIM):
         super().__init__()
-        # Define neural network to learn dynamics dx/dt = f(x)
-        # Improvement: Increased hidden_dim to 128 for greater model capacity
         self.net = nn.Sequential(
             nn.Linear(2, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, 2)
+            nn.Linear(hidden_dim, 2),
         ).to(device)
-        # Improvement 2: Apply He initialization to avoid vanishing gradients and trivial dynamics
         for module in self.net:
             if isinstance(module, nn.Linear):
-                nn.init.kaiming_normal_(module.weight, mode='fan_in', nonlinearity='relu')
+                nn.init.kaiming_normal_(module.weight, mode="fan_in", nonlinearity="relu")
                 if module.bias is not None:
                     nn.init.constant_(module.bias, 0.0)
 
-    def forward(self, x0, t):
-        # Integrate dynamics using RK4
-        return rk4_integrate(lambda x:  self.net(x), x0, t)  # [N,M,2]
+    def forward(self, x0: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+        return rk4_integrate(lambda x: self.net(x), x0, t)
 
-model = NeuralODE(hidden_dim=128).to(device)
 
-# -----------------------------
-# 3) Loss and optimizer
-# -----------------------------
-# Improvement: Add weight decay for L2 regularization to prevent overfitting to trivial solutions
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-2, weight_decay=1e-4)
-# Improvement: Add learning rate scheduler to reduce lr when loss plateaus
-# Keep verbose logging when supported, but stay compatible with builds where the kwarg was removed.
-try:
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='min', factor=0.5, patience=100, verbose=True
-    )
-except TypeError:
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='min', factor=0.5, patience=100
-    )
-mse = nn.MSELoss()
-
-# -----------------------------
-# 4) Training loop
-# -----------------------------
-def compute_derivative_norm(model, x_sim):
-    """
-    Compute the mean L2 norm of the derivatives to penalize trivial solutions.
-    Improvement: Penalizing small derivatives encourages non-trivial dynamics.
-    """
+def compute_derivative_norm(model: NeuralODE, x_sim: torch.Tensor) -> torch.Tensor:
     with torch.enable_grad():
-        x_sim = x_sim.clone().requires_grad_(True)
-        dx_dt = model.net(x_sim)  # [N,M,2]
-        norm = torch.mean(torch.norm(dx_dt, dim=-1))  # Mean L2 norm over batch and time
-    return norm
+        x_eval = x_sim.clone().requires_grad_(True)
+        dx_dt = model.net(x_eval)
+        return torch.mean(torch.norm(dx_dt, dim=-1))
 
-# Improvement: Increase to 1000 epochs to allow more time for convergence
-num_epochs = int(os.getenv("NUM_EPOCHS", "1000"))
-print_every = int(os.getenv("PRINT_EVERY", "100"))
-for epoch in range(num_epochs):
-    optimizer.zero_grad()
-    x_sim = model(x0_batch_normalized, t_grid)  # Simulate trajectories [N,M,2]
-    # Rescale simulated trajectories to original scale for loss computation
-    x_sim_rescaled = x_sim * x_obs_std + x_obs_mean
-    # Compute MSE loss between simulated and observed trajectories
-    mse_loss = mse(x_sim_rescaled, x_obs)
-    # Improvement: Add penalty for small derivative norms to avoid trivial solutions
-    deriv_norm = compute_derivative_norm(model, x_sim)
-    penalty = 0.01 * (1.0 / (deriv_norm + 1e-6))  # Penalize small derivatives
-    loss = mse_loss + penalty
-    loss.backward()
-    # Improvement: Clip gradients to stabilize training
-    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-    optimizer.step()
-    # Improvement: Step scheduler to adjust learning rate based on MSE loss
-    scheduler.step(mse_loss.detach())
 
-    # Improvement: Enhanced logging to monitor loss and derivative norm
-    if epoch % print_every == 0:
-        print(f"[{epoch:04d}] mse_loss={mse_loss.item():.6f}  deriv_norm={deriv_norm.item():.6f}  lr={optimizer.param_groups[0]['lr']:.6f}")
-
-# -----------------------------
-# 5) Inference / evaluation
-# -----------------------------
-with torch.no_grad():
-    x_fit = model(x0_batch_normalized, t_grid)  # Simulate fitted trajectories [N,M,2]
-    x_fit = x_fit * x_obs_std + x_obs_mean  # Rescale to original units
-
-# -----------------------------
-# 6) Plotting function
-# -----------------------------
 def plot_trajectories(
-    t_grid,
-    x_true,
-    x_fit,
-    num_trajectories=PLOT_COUNT,
-    save_dir=OUTPUT_DIR,
-    save_name="NODE_BPTT_tuned_plot.png",
-    show_plot=SHOW_PLOT,
-):
-    """
-    Plot true vs. fitted trajectories for a few sample trajectories.
-    t_grid: [N], x_true: [N,M,2], x_fit: [N,M,2]
-    """
-    t_grid = t_grid.cpu().numpy()
-    x_true = x_true.cpu().numpy()
-    x_fit = x_fit.cpu().numpy()
-    indices = torch.arange(min(num_trajectories, M)).numpy()
-    fig, axes = plt.subplots(
-        3, num_trajectories, figsize=(5 * num_trajectories, 11), sharex=True, squeeze=False
-    )
-    for i, idx in enumerate(indices):
-        axes[0, i].plot(t_grid, x_true[:, idx, 0], 'b-', label='True Angle (u)')
-        axes[0, i].plot(t_grid, x_fit[:, idx, 0], 'r--', label='Fitted Angle (u)')
-        axes[0, i].set_xlabel('Time (s)')
-        axes[0, i].set_ylabel('Angle (rad)')
-        axes[0, i].set_title(f'Trajectory {idx+1}: Angle')
-        axes[0, i].legend()
-        axes[0, i].grid(True)
-        axes[1, i].plot(t_grid, x_true[:, idx, 1], 'b-', label='True Angular Velocity (v)')
-        axes[1, i].plot(t_grid, x_fit[:, idx, 1], 'r--', label='Fitted Angular Velocity (v)')
-        axes[1, i].set_xlabel('Time (s)')
-        axes[1, i].set_ylabel('Angular Velocity (rad/s)')
-        axes[1, i].set_title(f'Trajectory {idx+1}: Angular Velocity')
-        axes[1, i].legend()
-        axes[1, i].grid(True)
+    t_grid: torch.Tensor,
+    x_true: torch.Tensor,
+    x_fit: torch.Tensor,
+    num_trajectories: int = PLOT_COUNT,
+    save_name: str = "NODE_BPTT_tuned_plot.png",
+) -> None:
+    t_np = t_grid.cpu().numpy()
+    x_true_np = x_true.cpu().numpy()
+    x_fit_np = x_fit.cpu().numpy()
+    indices = torch.arange(min(num_trajectories, x_true.shape[1])).cpu().numpy()
 
-        err_u = x_fit[:, idx, 0] - x_true[:, idx, 0]
-        err_v = x_fit[:, idx, 1] - x_true[:, idx, 1]
-        axes[2, i].plot(t_grid, err_u, "m-", label="Error u_hat - u")
-        axes[2, i].plot(t_grid, err_v, "g--", label="Error v_hat - v")
+    fig, axes = plt.subplots(3, len(indices), figsize=(5 * len(indices), 11), sharex=True, squeeze=False)
+    for i, idx in enumerate(indices):
+        axes[0, i].plot(t_np, x_true_np[:, idx, 0], "b-", label="True u")
+        axes[0, i].plot(t_np, x_fit_np[:, idx, 0], "r--", label="NODE u")
+        axes[0, i].set_title(f"Trajectory {idx + 1}: u")
+        axes[0, i].grid(True)
+        axes[0, i].legend()
+
+        axes[1, i].plot(t_np, x_true_np[:, idx, 1], "b-", label="True v")
+        axes[1, i].plot(t_np, x_fit_np[:, idx, 1], "r--", label="NODE v")
+        axes[1, i].set_title(f"Trajectory {idx + 1}: v")
+        axes[1, i].grid(True)
+        axes[1, i].legend()
+
+        axes[2, i].plot(t_np, x_fit_np[:, idx, 0] - x_true_np[:, idx, 0], "m-", label="u error")
+        axes[2, i].plot(t_np, x_fit_np[:, idx, 1] - x_true_np[:, idx, 1], "g--", label="v error")
         axes[2, i].axhline(0.0, color="k", linewidth=1.0, alpha=0.5)
+        axes[2, i].set_title(f"Trajectory {idx + 1}: error")
         axes[2, i].set_xlabel("Time (s)")
-        axes[2, i].set_ylabel("State Error")
-        axes[2, i].set_title(f"Trajectory {idx+1}: Error")
-        axes[2, i].legend()
         axes[2, i].grid(True)
+        axes[2, i].legend()
 
     plt.tight_layout()
-    save_path = Path(save_dir) / save_name
-    fig.savefig(save_path, dpi=180, bbox_inches="tight")
-    print(f"saved_plot={save_path}")
-    if show_plot:
-        plt.show()
-    else:
-        plt.close(fig)
+    fig.savefig(save_name, dpi=180, bbox_inches="tight")
+    print(f"saved_plot={save_name}")
+    plt.show()
 
-# Call the plotting function
+
+t_grid = torch.linspace(0.0, T, N, device=device)
+x0_batch = sample_ic(M)
+with torch.no_grad():
+    x_true = rk4_integrate(lambda x, b, l: pendulum_rhs(x, b, l, G_TRUE), x0_batch, t_grid, BETA_TRUE, ELL_TRUE)
+x_obs = (x_true + NOISE_STD * torch.randn_like(x_true)).detach()
+
+x_obs_mean = x_obs.mean(dim=[0, 1], keepdim=True)
+x_obs_std = x_obs.std(dim=[0, 1], keepdim=True) + 1e-6
+x0_batch_normalized = (x0_batch - x_obs_mean[0]) / x_obs_std[0]
+
+model = NeuralODE(hidden_dim=HIDDEN_DIM).to(device)
+optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
+try:
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="min", factor=0.5, patience=100, verbose=True
+    )
+except TypeError:
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=100)
+mse = nn.MSELoss()
+
+for epoch in range(NUM_EPOCHS):
+    optimizer.zero_grad()
+    x_sim = model(x0_batch_normalized, t_grid)
+    x_sim_rescaled = x_sim * x_obs_std + x_obs_mean
+    mse_loss = mse(x_sim_rescaled, x_obs)
+    deriv_norm = compute_derivative_norm(model, x_sim)
+    loss = mse_loss + 0.01 * (1.0 / (deriv_norm + 1e-6))
+    loss.backward()
+    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+    optimizer.step()
+    scheduler.step(mse_loss.detach())
+
+    if epoch % PRINT_EVERY == 0:
+        print(
+            f"[{epoch:04d}] mse_loss={mse_loss.item():.6f} "
+            f"deriv_norm={deriv_norm.item():.6f} lr={optimizer.param_groups[0]['lr']:.6f}"
+        )
+
+with torch.no_grad():
+    x_fit = model(x0_batch_normalized, t_grid)
+    x_fit = x_fit * x_obs_std + x_obs_mean
+
 plot_trajectories(t_grid, x_true, x_fit, num_trajectories=PLOT_COUNT)

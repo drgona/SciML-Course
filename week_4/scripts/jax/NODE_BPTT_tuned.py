@@ -1,27 +1,30 @@
-import os
-from pathlib import Path
-
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
 
-SEED = int(os.getenv("SEED", "0"))
-SCRIPT_DIR = Path(__file__).resolve().parent
-OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", str(SCRIPT_DIR)))
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-SHOW_PLOT = os.getenv("SHOW_PLOT", "1") == "1"
-PLOT_COUNT = int(os.getenv("PLOT_COUNT", "3"))
-USE_JIT = os.getenv("USE_JIT", "1") == "1"
+SEED = 0
+USE_JIT = True
+G_TRUE = 9.81
+BETA_TRUE = 0.25
+ELL_TRUE = 0.9
+T_FINAL = 5.0
+N_STEPS = 200
+N_TRAJ = 32
+NOISE_STD = 0.01
+HIDDEN_DIM = 128
+LR = 1e-2
+WEIGHT_DECAY = 1e-4
+NUM_EPOCHS = 1000
+PRINT_EVERY = 100
+PLOT_COUNT = 3
 
 
 def pendulum_rhs(x: jnp.ndarray, beta: float, ell: float, g: float = 9.81) -> jnp.ndarray:
     u = x[..., 0]
     v = x[..., 1]
-    du = v
-    dv = -beta * v - (g / ell) * jnp.sin(u)
-    return jnp.stack([du, dv], axis=-1)
+    return jnp.stack([v, -beta * v - (g / ell) * jnp.sin(u)], axis=-1)
 
 
 def rk4_step(f, x: jnp.ndarray, dt: jnp.ndarray) -> jnp.ndarray:
@@ -73,10 +76,6 @@ def mlp_apply(params: list[dict[str, jnp.ndarray]], x: jnp.ndarray) -> jnp.ndarr
     h = jax.nn.relu(h @ params[1]["w"] + params[1]["b"])
     y = h @ params[2]["w"] + params[2]["b"]
     return y.reshape(x_shape)
-
-
-def tree_add(a, b):
-    return jax.tree_util.tree_map(lambda x, y: x + y, a, b)
 
 
 def tree_zeros_like(tree):
@@ -152,85 +151,60 @@ def plot_trajectories(
     t_grid: jnp.ndarray,
     x_true: jnp.ndarray,
     x_fit: jnp.ndarray,
-    num_trajectories: int,
-    save_dir: Path,
-    save_name: str,
-    show_plot: bool,
-):
+    num_trajectories: int = PLOT_COUNT,
+    save_name: str = "NODE_BPTT_tuned_plot.png",
+) -> None:
     t_np = np.asarray(t_grid)
     x_true_np = np.asarray(x_true)
     x_fit_np = np.asarray(x_fit)
     indices = np.arange(min(num_trajectories, x_true_np.shape[1]))
 
-    fig, axes = plt.subplots(
-        3, len(indices), figsize=(5 * len(indices), 11), sharex=True, squeeze=False
-    )
+    fig, axes = plt.subplots(3, len(indices), figsize=(5 * len(indices), 11), sharex=True, squeeze=False)
     for i, idx in enumerate(indices):
-        axes[0, i].plot(t_np, x_true_np[:, idx, 0], "b-", label="True Angle (u)")
-        axes[0, i].plot(t_np, x_fit_np[:, idx, 0], "r--", label="Fitted Angle (u)")
-        axes[0, i].set_xlabel("Time (s)")
-        axes[0, i].set_ylabel("Angle (rad)")
-        axes[0, i].set_title(f"Trajectory {idx + 1}: Angle")
-        axes[0, i].legend()
+        axes[0, i].plot(t_np, x_true_np[:, idx, 0], "b-", label="True u")
+        axes[0, i].plot(t_np, x_fit_np[:, idx, 0], "r--", label="NODE u")
+        axes[0, i].set_title(f"Trajectory {idx + 1}: u")
         axes[0, i].grid(True)
+        axes[0, i].legend()
 
-        axes[1, i].plot(t_np, x_true_np[:, idx, 1], "b-", label="True Angular Velocity (v)")
-        axes[1, i].plot(t_np, x_fit_np[:, idx, 1], "r--", label="Fitted Angular Velocity (v)")
-        axes[1, i].set_xlabel("Time (s)")
-        axes[1, i].set_ylabel("Angular Velocity (rad/s)")
-        axes[1, i].set_title(f"Trajectory {idx + 1}: Angular Velocity")
-        axes[1, i].legend()
+        axes[1, i].plot(t_np, x_true_np[:, idx, 1], "b-", label="True v")
+        axes[1, i].plot(t_np, x_fit_np[:, idx, 1], "r--", label="NODE v")
+        axes[1, i].set_title(f"Trajectory {idx + 1}: v")
         axes[1, i].grid(True)
+        axes[1, i].legend()
 
-        err_u = x_fit_np[:, idx, 0] - x_true_np[:, idx, 0]
-        err_v = x_fit_np[:, idx, 1] - x_true_np[:, idx, 1]
-        axes[2, i].plot(t_np, err_u, "m-", label="Error u_hat - u")
-        axes[2, i].plot(t_np, err_v, "g--", label="Error v_hat - v")
+        axes[2, i].plot(t_np, x_fit_np[:, idx, 0] - x_true_np[:, idx, 0], "m-", label="u error")
+        axes[2, i].plot(t_np, x_fit_np[:, idx, 1] - x_true_np[:, idx, 1], "g--", label="v error")
         axes[2, i].axhline(0.0, color="k", linewidth=1.0, alpha=0.5)
+        axes[2, i].set_title(f"Trajectory {idx + 1}: error")
         axes[2, i].set_xlabel("Time (s)")
-        axes[2, i].set_ylabel("State Error")
-        axes[2, i].set_title(f"Trajectory {idx + 1}: Error")
-        axes[2, i].legend()
         axes[2, i].grid(True)
+        axes[2, i].legend()
 
     plt.tight_layout()
-    save_path = save_dir / save_name
-    fig.savefig(save_path, dpi=180, bbox_inches="tight")
-    print(f"saved_plot={save_path}")
-    if show_plot:
-        plt.show()
-    else:
-        plt.close(fig)
+    fig.savefig(save_name, dpi=180, bbox_inches="tight")
+    print(f"saved_plot={save_name}")
+    plt.show()
 
 
-def main():
-    g_true = 9.81
-    beta_true = 0.25
-    ell_true = 0.9
-
-    t_final = float(os.getenv("T_FINAL", "5.0"))
-    n_steps = int(os.getenv("N_STEPS", "200"))
-    n_traj = int(os.getenv("N_TRAJ", "32"))
-    t_grid = jnp.linspace(0.0, t_final, n_steps)
+def main() -> None:
+    t_grid = jnp.linspace(0.0, T_FINAL, N_STEPS)
     print(f"backend={jax.default_backend()} devices={jax.devices()} jit={USE_JIT}")
 
     key = jax.random.PRNGKey(SEED)
     key_ic, key_noise, key_model = jax.random.split(key, 3)
 
-    x0_batch = sample_ic(key_ic, n_traj)
-    x_true = rk4_integrate(lambda x: pendulum_rhs(x, beta_true, ell_true, g_true), x0_batch, t_grid)
-    x_obs = x_true + 0.01 * jax.random.normal(key_noise, x_true.shape)
+    x0_batch = sample_ic(key_ic, N_TRAJ)
+    x_true = rk4_integrate(lambda x: pendulum_rhs(x, BETA_TRUE, ELL_TRUE, G_TRUE), x0_batch, t_grid)
+    x_obs = x_true + NOISE_STD * jax.random.normal(key_noise, x_true.shape)
 
     x_obs_mean = jnp.mean(x_obs, axis=(0, 1), keepdims=True)
     x_obs_std = jnp.std(x_obs, axis=(0, 1), keepdims=True) + 1e-6
     x0_batch_normalized = (x0_batch - x_obs_mean[0]) / x_obs_std[0]
 
-    params = init_mlp(key_model, hidden_dim=128)
+    params = init_mlp(key_model, hidden_dim=HIDDEN_DIM)
     state = adam_init(params)
-
-    initial_lr = float(os.getenv("LR", "1e-2"))
-    weight_decay = float(os.getenv("WEIGHT_DECAY", "1e-4"))
-    scheduler = ReduceLROnPlateau(lr=initial_lr, factor=0.5, patience=100)
+    scheduler = ReduceLROnPlateau(lr=LR, factor=0.5, patience=100)
 
     def simulate(curr_params, x0):
         return rk4_integrate(lambda x: mlp_apply(curr_params, x), x0, t_grid)
@@ -240,8 +214,7 @@ def main():
         x_sim_rescaled = x_sim * x_obs_std + x_obs_mean
         mse_loss = jnp.mean((x_sim_rescaled - x_obs) ** 2)
         deriv_norm = jnp.mean(jnp.linalg.norm(mlp_apply(curr_params, x_sim), axis=-1))
-        penalty = 0.01 * (1.0 / (deriv_norm + 1e-6))
-        loss = mse_loss + penalty
+        loss = mse_loss + 0.01 * (1.0 / (deriv_norm + 1e-6))
         return loss, (mse_loss, deriv_norm)
 
     def train_step(curr_params, curr_state, curr_lr):
@@ -251,42 +224,31 @@ def main():
             grads,
             curr_state,
             lr=curr_lr,
-            weight_decay=weight_decay,
+            weight_decay=WEIGHT_DECAY,
             clip_norm=1.0,
         )
         return next_params, next_state, loss, mse_loss, deriv_norm
 
     if USE_JIT:
-        train_step = jax.jit(train_step)
+        train_step_jit = jax.jit(train_step)
         simulate_eval = jax.jit(simulate)
     else:
+        train_step_jit = train_step
         simulate_eval = simulate
 
-    num_epochs = int(os.getenv("NUM_EPOCHS", "1000"))
-    print_every = int(os.getenv("PRINT_EVERY", "100"))
-
-    for epoch in range(num_epochs):
+    for epoch in range(NUM_EPOCHS):
         curr_lr = scheduler.lr
-        params, state, loss, mse_loss, deriv_norm = train_step(params, state, curr_lr)
+        params, state, loss, mse_loss, deriv_norm = train_step_jit(params, state, curr_lr)
         curr_lr = scheduler.step(float(mse_loss))
-        if epoch % print_every == 0:
+        if epoch % PRINT_EVERY == 0:
             print(
-                f"[{epoch:04d}] mse_loss={float(mse_loss):.6f}  "
-                f"deriv_norm={float(deriv_norm):.6f}  lr={curr_lr:.6f}"
+                f"[{epoch:04d}] mse_loss={float(mse_loss):.6f} "
+                f"deriv_norm={float(deriv_norm):.6f} lr={curr_lr:.6f}"
             )
 
     x_fit = simulate_eval(params, x0_batch_normalized)
     x_fit = x_fit * x_obs_std + x_obs_mean
-
-    plot_trajectories(
-        t_grid=t_grid,
-        x_true=x_true,
-        x_fit=x_fit,
-        num_trajectories=PLOT_COUNT,
-        save_dir=OUTPUT_DIR,
-        save_name="NODE_BPTT_tuned_plot.png",
-        show_plot=SHOW_PLOT,
-    )
+    plot_trajectories(t_grid=t_grid, x_true=x_true, x_fit=x_fit, num_trajectories=PLOT_COUNT)
 
 
 if __name__ == "__main__":

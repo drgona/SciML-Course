@@ -6,77 +6,12 @@
   "cells": [
     {
       "id": "Hbol",
-      "code_hash": "5ab11d480535121000347f8f1108b1f4",
+      "code_hash": "681e0d77c468c85a163ed74380115de9",
       "outputs": [
         {
           "type": "data",
           "data": {
-            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h1 id=\"neural-ode-training-with-a-custom-adjoint-pytorch\">Neural ODE Training with a Custom Adjoint (PyTorch)</h1>\n<span class=\"paragraph\">This notebook converts <code>week_4/scripts/torch/NODE_adjoint_example.py</code> into an interactive marimo app.</span>\n<span class=\"paragraph\"><strong>Navigation:</strong> <a href=\"#control-panel\">Jump to Control Panel</a></span></span>"
-          }
-        }
-      ],
-      "console": []
-    },
-    {
-      "id": "vblA",
-      "code_hash": "17c731a6579ca1b5a9c862c33afe2d66",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"1-discrete-rk4-dynamics-and-adjoint-gradient\">1. Discrete RK4 Dynamics and Adjoint Gradient</h2>\n<span class=\"paragraph\">True and learned systems:</span>\n<marimo-tex class=\"arithmatex\">||[x(t)=\\begin{bmatrix}u(t)\\\\v(t)\\end{bmatrix},\\qquad\n\\dot{u}=v,\\qquad\n\\dot{v}=-\\beta v-\\frac{g}{\\ell}\\sin(u),\\qquad\n\\dot{x}=f_\\theta(x).||]</marimo-tex><span class=\"paragraph\">RK4 one-step map:</span>\n<marimo-tex class=\"arithmatex\">||[x_k=\\Phi_\\theta(x_{k-1}).||]</marimo-tex><span class=\"paragraph\">Trajectory objective:</span>\n<marimo-tex class=\"arithmatex\">||[\\mathcal{L}=\\sum_{k=0}^{N}\\ell(x_k),\\qquad\n\\ell(x_k)=\\|x_k^{\\mathrm{sim}}-x_k^{\\mathrm{obs}}\\|_2^2.||]</marimo-tex><span class=\"paragraph\">Discrete adjoint recursion (backward in time):</span>\n<marimo-tex class=\"arithmatex\">||[a_{k-1}=a_k\\frac{\\partial\\Phi_\\theta}{\\partial x_{k-1}} + \\frac{\\partial\\ell_{k-1}}{\\partial x_{k-1}},\n\\qquad a_N=\\frac{\\partial\\ell_N}{\\partial x_N}.||]</marimo-tex><span class=\"paragraph\">Parameter gradient accumulation:</span>\n<marimo-tex class=\"arithmatex\">||[\\nabla_\\theta \\mathcal{L} = \\sum_{k=1}^{N} a_k\\frac{\\partial\\Phi_\\theta}{\\partial\\theta}.||]</marimo-tex><span class=\"paragraph\">The notebook implements this with a custom <code>torch.autograd.Function</code> that:</span>\n<ol>\n<li>runs forward RK4 in <code>forward</code>,</li>\n<li>replays a backward-time augmented system in <code>backward</code>.</li>\n</ol></span>"
-          }
-        }
-      ],
-      "console": []
-    },
-    {
-      "id": "lEQa",
-      "code_hash": "af38740cfc7214e244e7195080278d61",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"11-code-custom-adjoint-operator\">1.1 Code: Custom Adjoint Operator</h3>\n<span class=\"paragraph\">The next code cell builds:</span>\n<marimo-tex class=\"arithmatex\">||[\\frac{da}{dt}=-a^\\top\\frac{\\partial f_\\theta}{\\partial x},\\qquad\n\\frac{d}{dt}\\nabla_\\theta\\mathcal{L}=-a^\\top\\frac{\\partial f_\\theta}{\\partial\\theta},||]</marimo-tex><span class=\"paragraph\">and integrates this augmented backward system with RK4.</span></span>"
-          }
-        }
-      ],
-      "console": []
-    },
-    {
-      "id": "Xref",
-      "code_hash": "7e6024658d4aae3ffebd111210eae9db",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"12-code-training-objective-and-optimization\">1.2 Code: Training Objective and Optimization</h3>\n<span class=\"paragraph\">We optimize:</span>\n<marimo-tex class=\"arithmatex\">||[\\mathcal{L}=\\mathcal{L}_{\\mathrm{data}}+\\lambda\\mathcal{R},\\qquad\n\\mathcal{R}=\\frac{1}{\\operatorname{mean}\\|f_\\theta(x)\\|_2+\\varepsilon},||]</marimo-tex><span class=\"paragraph\">with Adam, optional weight decay, clipping, and plateau LR scheduling.</span></span>"
-          }
-        }
-      ],
-      "console": []
-    },
-    {
-      "id": "BYtC",
-      "code_hash": "8f7ead8360ca4108333331794b02e6ea",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><a id=\"control-panel\"></a></span>\n<h2 id=\"3-control-panel\">3. Control Panel</h2>\n<span class=\"paragraph\">Defaults mirror the script-level adjoint setup: normalized data, scheduler, clipping,\nweight decay, and regularization are all available with practical starting values.</span>\n<span class=\"paragraph\">For a simpler baseline, disable regularization and scheduler first, then re-enable progressively.</span></span>"
-          }
-        }
-      ],
-      "console": []
-    },
-    {
-      "id": "emfo",
-      "code_hash": "84ee8681805e9454d15a4c1259bb33f0",
-      "outputs": [
-        {
-          "type": "data",
-          "data": {
-            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"4-results\">4. Results</h2></span>"
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h1 id=\"neural-ode-training-with-a-custom-adjoint-solver-pytorch\">Neural ODE Training with a Custom Adjoint Solver (PyTorch)</h1>\n<span class=\"paragraph\">This notebook converts <code>week_4/scripts/torch/NODE_adjoint_example.py</code> into an interactive didactical notebook.</span>\n<span class=\"paragraph\"><strong>Navigation:</strong> <a href=\"#control-panel\">Jump to Control Panel</a></span></span>"
           }
         }
       ],
@@ -96,8 +31,34 @@
       "console": []
     },
     {
+      "id": "vblA",
+      "code_hash": "e74ef044f515c134e6658b900f51a793",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"1-problem-formulation\">1. Problem Formulation</h2>\n<span class=\"paragraph\">We observe noisy pendulum trajectories and train a Neural ODE model.</span>\n<span class=\"paragraph\">Reference dynamics:</span>\n<marimo-tex class=\"arithmatex\">||[x(t)=\\begin{bmatrix}u(t)\\\\v(t)\\end{bmatrix},\\quad\n\\dot{u}=v,\\quad\n\\dot{v}=-\\beta v-\\frac{g}{\\ell}\\sin(u).||]</marimo-tex><span class=\"paragraph\">Learned dynamics:</span>\n<marimo-tex class=\"arithmatex\">||[\\frac{dx}{dt}=f_\\theta(x),\\qquad x(t_0)=x_0.||]</marimo-tex><span class=\"paragraph\">Training objective:</span>\n<marimo-tex class=\"arithmatex\">||[\\mathcal{L}(\\theta)=\\frac{1}{MN}\\sum_{i=1}^{M}\\sum_{k=0}^{N}\\|x^i_k-\\hat{x}^i_k\\|_2^2 + \\lambda R(\\theta).||]</marimo-tex><span class=\"paragraph\">Write the sampled loss as</span>\n<marimo-tex class=\"arithmatex\">||[\\mathcal{L}(\\theta)=\\sum_{k=0}^{N}\\ell_k(x_k,\\theta)+\\lambda R(\\theta),\\qquad\n\\ell_k=\\frac{1}{M}\\sum_{i=1}^{M}\\|x_k^i-\\hat{x}_k^i\\|_2^2.||]</marimo-tex><span class=\"paragraph\">Instead of storing every solver operation like BPTT, the adjoint method tracks\ntwo continuous sensitivity states:</span>\n<marimo-tex class=\"arithmatex\">||[\\frac{da}{dt}=-(\\nabla_x f_\\theta)^\\top a,\\qquad\n\\frac{dg}{dt}=-(\\nabla_\\theta f_\\theta)^\\top a,\\qquad\n\\nabla_\\theta\\mathcal{L}=g(t_0).||]</marimo-tex><span class=\"paragraph\">Boundary conditions for backward integration are</span>\n<marimo-tex class=\"arithmatex\">||[a(T)=\\nabla_{x_N}\\ell_N,\\qquad g(T)=0.||]</marimo-tex><span class=\"paragraph\">For losses sampled at grid points, the state sensitivity receives jump updates:</span>\n<marimo-tex class=\"arithmatex\">||[a(t_k^-)=a(t_k^+)+\\nabla_{x_k}\\ell_k.||]</marimo-tex><span class=\"paragraph\">Over one interval, parameter-gradient accumulation is</span>\n<marimo-tex class=\"arithmatex\">||[g(t_{k-1})=g(t_k)+\\int_{t_k}^{t_{k-1}}\n-(\\nabla_\\theta f_\\theta(x(t)))^\\top a(t)\\,dt.||]</marimo-tex><span class=\"paragraph\">Notation used in this notebook:</span>\n<ul>\n<li><marimo-tex class=\"arithmatex\">||(t||)</marimo-tex>: continuous time, with <marimo-tex class=\"arithmatex\">||(t_0||)</marimo-tex> (start), <marimo-tex class=\"arithmatex\">||(T||)</marimo-tex> (end), and samples <marimo-tex class=\"arithmatex\">||(t_k||)</marimo-tex>.</li>\n<li><marimo-tex class=\"arithmatex\">||(x(t)\\in\\mathbb{R}^n||)</marimo-tex>: state, <marimo-tex class=\"arithmatex\">||(x_k\\approx x(t_k)||)</marimo-tex> on the grid, <marimo-tex class=\"arithmatex\">||(x_0=x(t_0)||)</marimo-tex>.</li>\n<li><marimo-tex class=\"arithmatex\">||(f_\\theta||)</marimo-tex>: neural vector field with parameters <marimo-tex class=\"arithmatex\">||(\\theta\\in\\mathbb{R}^p||)</marimo-tex>.</li>\n<li><marimo-tex class=\"arithmatex\">||(a(t)||)</marimo-tex>: state sensitivity (adjoint), <marimo-tex class=\"arithmatex\">||(g(t)||)</marimo-tex>: parameter-gradient accumulator.</li>\n<li><marimo-tex class=\"arithmatex\">||(M||)</marimo-tex>: number of trajectories, <marimo-tex class=\"arithmatex\">||(N||)</marimo-tex>: number of time steps.</li>\n<li><marimo-tex class=\"arithmatex\">||(\\hat{x}_k^i||)</marimo-tex>: observation for trajectory <marimo-tex class=\"arithmatex\">||(i||)</marimo-tex> at index <marimo-tex class=\"arithmatex\">||(k||)</marimo-tex>.</li>\n</ul>\n<span class=\"paragraph\">Note: in the adjoint equations, <marimo-tex class=\"arithmatex\">||(g(t)||)</marimo-tex> is a gradient accumulator; it is not\nthe pendulum gravity constant.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
       "id": "bkHC",
-      "code_hash": "9dd87798955fbbd18ee2f68f7749e706",
+      "code_hash": "73255b4fe1fda1909eefbac4f06ee6b4",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"11-initial-condition-sampler-x_0\">1.1 Initial condition sampler <marimo-tex class=\"arithmatex\">||(x_0||)</marimo-tex></h3>\n<span class=\"paragraph\">For each trajectory <marimo-tex class=\"arithmatex\">||(i||)</marimo-tex>:</span>\n<marimo-tex class=\"arithmatex\">||[u_0^i \\sim \\mathcal{U}[-0.5,0.5],\\qquad\nv_0^i \\sim \\mathcal{U}[-0.5,0.5],\\qquad\nx_0^i=[u_0^i,v_0^i]^\\top.||]</marimo-tex><span class=\"paragraph\">Stacking all <marimo-tex class=\"arithmatex\">||(x_0^i||)</marimo-tex> gives a batch of initial states.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "2f691783fce06c9084403dc57471ae86",
       "outputs": [
         {
           "type": "data",
@@ -110,7 +71,20 @@
     },
     {
       "id": "PKri",
-      "code_hash": "ecb5db1a421188b582b5153444d0bb11",
+      "code_hash": "a9c13400c9401b898340a5f0646a65e8",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"12-reference-dynamics-ftx\">1.2 Reference dynamics <marimo-tex class=\"arithmatex\">||(f(t,x)||)</marimo-tex></h3>\n<span class=\"paragraph\">The data-generating physical dynamics is</span>\n<marimo-tex class=\"arithmatex\">||[x=[u,v]^\\top,\\quad \\dot{u}=v,\\quad \\dot{v}=-\\beta v-\\frac{g}{\\ell}\\sin(u).||]</marimo-tex><span class=\"paragraph\">This defines the ground-truth trajectories used to create observations.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Xref",
+      "code_hash": "b52a008b39c23182a5478b7cdfe73ce8",
       "outputs": [
         {
           "type": "data",
@@ -123,7 +97,20 @@
     },
     {
       "id": "SFPL",
-      "code_hash": "4ba87d4b6403bf1dd7278d30677a8636",
+      "code_hash": "eb3b8bb41cd6e0840426437c7b5216b7",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"13-one-rk4-step-for-autonomous-odes\">1.3 One RK4 step for autonomous ODEs</h3>\n<span class=\"paragraph\">For step size <marimo-tex class=\"arithmatex\">||(h_k=t_{k+1}-t_k||)</marimo-tex>, RK4 uses</span>\n<marimo-tex class=\"arithmatex\">||[k_1=f(x_k),\\quad\nk_2=f\\!\\left(x_k+\\frac{h_k}{2}k_1\\right),\\quad\nk_3=f\\!\\left(x_k+\\frac{h_k}{2}k_2\\right),\\quad\nk_4=f(x_k+h_k k_3),||]</marimo-tex><span class=\"paragraph\">then updates</span>\n<marimo-tex class=\"arithmatex\">||[x_{k+1}=x_k+\\frac{h_k}{6}(k_1+2k_2+2k_3+k_4).||]</marimo-tex></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "BYtC",
+      "code_hash": "7328f15b6029028c66813f69df5c7b02",
       "outputs": [
         {
           "type": "data",
@@ -136,12 +123,12 @@
     },
     {
       "id": "RGSE",
-      "code_hash": "848fac042929057ff871147c758ed517",
+      "code_hash": "d4194c34081e23b7f64abd655863d8ad",
       "outputs": [
         {
           "type": "data",
           "data": {
-            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='RGSE-23' random-id='c75dffe4-9c3d-cb32-888a-87f0ca426ab3'><marimo-button data-initial-value='0' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Train Torch Adjoint NODE&lt;/span&gt;&lt;/span&gt;&quot;' data-kind='&quot;neutral&quot;' data-disabled='false' data-full-width='false'></marimo-button></marimo-ui-element><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>Device:</strong> <code>cuda</code></span></span><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"physics\">Physics</h3></span><marimo-ui-element object-id='RGSE-1' random-id='bf38a502-fd7d-9dd5-eb5b-ade41444eb80'><marimo-slider data-initial-value='9.81' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Gravity g&lt;/span&gt;&lt;/span&gt;&quot;' data-start='5.0' data-stop='15.0' data-step='0.01' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='RGSE-2' random-id='ba0e3625-c46a-5206-5e91-3ed960f1d60b'><marimo-slider data-initial-value='0.25' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Damping beta&lt;/span&gt;&lt;/span&gt;&quot;' data-start='0.05' data-stop='1.0' data-step='0.01' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='RGSE-3' random-id='62607ccf-3836-23d2-9705-744a5b517ea0'><marimo-slider data-initial-value='0.9' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Length ell&lt;/span&gt;&lt;/span&gt;&quot;' data-start='0.3' data-stop='2.0' data-step='0.01' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"data-generation\">Data Generation</h3></span><marimo-ui-element object-id='RGSE-0' random-id='4af52327-68c1-451d-c541-adf4653f3c36'><marimo-number data-initial-value='0' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Seed&lt;/span&gt;&lt;/span&gt;&quot;' data-debounce='false' data-full-width='false' data-disabled='false'></marimo-number></marimo-ui-element><marimo-ui-element object-id='RGSE-4' random-id='f916a996-a213-b3ae-5aaf-82697e1e2e06'><marimo-slider data-initial-value='5.0' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Final time T&lt;/span&gt;&lt;/span&gt;&quot;' data-start='1.0' data-stop='10.0' data-step='0.5' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='RGSE-5' random-id='9f257416-16b1-3b67-1279-7d3dfcc5d8db'><marimo-slider data-initial-value='200' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Time steps N&lt;/span&gt;&lt;/span&gt;&quot;' data-start='50' data-stop='500' data-step='10' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='RGSE-6' random-id='b7938939-8a3c-c9f4-b9b2-78c8de73141c'><marimo-slider data-initial-value='32' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Trajectories M&lt;/span&gt;&lt;/span&gt;&quot;' data-start='4' data-stop='128' data-step='4' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='RGSE-7' random-id='d8e38a97-f0ab-c990-f3cb-dd6e6caeebdf'><marimo-slider data-initial-value='0.01' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Observation noise&lt;/span&gt;&lt;/span&gt;&quot;' data-start='0.0' data-stop='0.1' data-step='0.005' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"model\">Model</h3></span><marimo-ui-element object-id='RGSE-8' random-id='d7c3106c-b256-604e-927f-b6d1a994fd7f'><marimo-slider data-initial-value='128' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Hidden dimension&lt;/span&gt;&lt;/span&gt;&quot;' data-start='16' data-stop='256' data-step='16' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='RGSE-9' random-id='f9be317c-5714-7d81-6710-46835badf7e8'><marimo-checkbox data-initial-value='true' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Use He initialization&lt;/span&gt;&lt;/span&gt;&quot;' data-disabled='false'></marimo-checkbox></marimo-ui-element><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"training\">Training</h3></span><marimo-ui-element object-id='RGSE-10' random-id='155e2a9f-54b1-5c33-a6c4-c7669bce23d1'><marimo-dropdown data-initial-value='[&quot;1000 (script default)&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Epochs&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;500&quot;,&quot;1000 (script default)&quot;,&quot;2000&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='RGSE-11' random-id='3e490fbf-57aa-5a39-fb9f-7db237ea8454'><marimo-dropdown data-initial-value='[&quot;1e-2 (script default)&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Learning rate&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;5e-2&quot;,&quot;1e-2 (script default)&quot;,&quot;5e-3&quot;,&quot;1e-3&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='RGSE-12' random-id='e1900155-8f8b-b371-9a12-4c94cd591968'><marimo-slider data-initial-value='100' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Print every&lt;/span&gt;&lt;/span&gt;&quot;' data-start='10' data-stop='500' data-step='10' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"regularization\">Regularization</h3></span><marimo-ui-element object-id='RGSE-13' random-id='0b299557-be4b-b62d-6f16-e8653279befd'><marimo-checkbox data-initial-value='true' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Use derivative regularization&lt;/span&gt;&lt;/span&gt;&quot;' data-disabled='false'></marimo-checkbox></marimo-ui-element><marimo-ui-element object-id='RGSE-14' random-id='1dcfbf98-39e4-de77-b564-412f399fc202'><marimo-slider data-initial-value='0.01' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Regularization strength&lt;/span&gt;&lt;/span&gt;&quot;' data-start='0.0' data-stop='0.2' data-step='0.001' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"optimization-stabilization\">Optimization Stabilization</h3></span><marimo-ui-element object-id='RGSE-15' random-id='9433e856-a6b3-e1df-4f46-3f58e9c94d91'><marimo-checkbox data-initial-value='true' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Use weight decay&lt;/span&gt;&lt;/span&gt;&quot;' data-disabled='false'></marimo-checkbox></marimo-ui-element><marimo-ui-element object-id='RGSE-16' random-id='46a8ae6e-20a9-4b67-53b8-aed9bdd08791'><marimo-dropdown data-initial-value='[&quot;1e-4 (script default)&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Weight decay&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;1e-5&quot;,&quot;1e-4 (script default)&quot;,&quot;1e-3&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='RGSE-17' random-id='1104bff3-959e-774d-77db-85456fd76b23'><marimo-checkbox data-initial-value='true' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Use ReduceLROnPlateau&lt;/span&gt;&lt;/span&gt;&quot;' data-disabled='false'></marimo-checkbox></marimo-ui-element><marimo-ui-element object-id='RGSE-18' random-id='fd2ec1c8-ded9-5539-877e-c85748eefb6b'><marimo-slider data-initial-value='0.5' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Scheduler factor&lt;/span&gt;&lt;/span&gt;&quot;' data-start='0.1' data-stop='0.9' data-step='0.1' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='RGSE-19' random-id='f7925772-f64d-9e91-45a5-3b066b5d2bc6'><marimo-slider data-initial-value='100' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Scheduler patience&lt;/span&gt;&lt;/span&gt;&quot;' data-start='10' data-stop='300' data-step='10' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='RGSE-20' random-id='4d93faab-779a-8d75-2451-a688e2ee97d5'><marimo-checkbox data-initial-value='true' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Use gradient clipping&lt;/span&gt;&lt;/span&gt;&quot;' data-disabled='false'></marimo-checkbox></marimo-ui-element><marimo-ui-element object-id='RGSE-21' random-id='7ed4752a-9612-cd10-6ddc-179724ae46d0'><marimo-slider data-initial-value='1.0' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Clip norm&lt;/span&gt;&lt;/span&gt;&quot;' data-start='0.1' data-stop='5.0' data-step='0.1' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"visualization\">Visualization</h3></span><marimo-ui-element object-id='RGSE-22' random-id='4d0a41cf-827c-0f6d-6a64-e17b107f9f43'><marimo-slider data-initial-value='3' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Trajectories to plot&lt;/span&gt;&lt;/span&gt;&quot;' data-start='1' data-stop='8' data-step='1' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element></div>"
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"14-rk4-rollout-on-the-full-grid\">1.4 RK4 rollout on the full grid</h3>\n<span class=\"paragraph\">Repeating the one-step update for <marimo-tex class=\"arithmatex\">||(k=0,\\dots,N-1||)</marimo-tex> produces</span>\n<marimo-tex class=\"arithmatex\">||[X=[x_0, x_1, \\dots, x_N].||]</marimo-tex><span class=\"paragraph\">These stored forward states are reused by the custom adjoint backward pass.</span></span>"
           }
         }
       ],
@@ -149,6 +136,305 @@
     },
     {
       "id": "Kclp",
+      "code_hash": "daaa02335d9ec43f1120a3dee26d51f5",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "emfo",
+      "code_hash": "52943d5d5b35963621ec8b936bb74a4c",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"2-adjoint-solver-components\">2. Adjoint Solver Components</h2>\n<span class=\"paragraph\">We now define the neural vector field and the augmented adjoint dynamics used in <code>backward</code>.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Hstk",
+      "code_hash": "f79298b475926ac99275f8734cd7581f",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"21-neural-vector-field-module-f_theta\">2.1 Neural vector field module <marimo-tex class=\"arithmatex\">||(f_\\theta||)</marimo-tex></h3>\n<span class=\"paragraph\"><code>ODEFunc</code> parameterizes</span>\n<marimo-tex class=\"arithmatex\">||[f_\\theta:\\mathbb{R}^n\\to\\mathbb{R}^n,\\qquad \\dot{x}=f_\\theta(x).||]</marimo-tex><span class=\"paragraph\">Here <marimo-tex class=\"arithmatex\">||(n=2||)</marimo-tex> (angle and angular velocity).</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "nWHF",
+      "code_hash": "237b23451bbf34c425999c0742b46ce2",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "iLit",
+      "code_hash": "d96588a134c1df9f9d7426f4161d3ab1",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"22-augmented-adjoint-dynamics-xag\">2.2 Augmented adjoint dynamics <marimo-tex class=\"arithmatex\">||((x,a,g)||)</marimo-tex></h3>\n<span class=\"paragraph\">Let</span>\n<marimo-tex class=\"arithmatex\">||[J_x(x,\\theta)=\\nabla_x f_\\theta(x)\\in\\mathbb{R}^{n\\times n},\\qquad\nJ_\\theta(x,\\theta)=\\nabla_\\theta f_\\theta(x).||]</marimo-tex><span class=\"paragraph\">For backward integration, we evaluate</span>\n<marimo-tex class=\"arithmatex\">||[\\dot{x}=f_\\theta(x),\\qquad\n\\dot{a}=-J_x(x,\\theta)^\\top a,\\qquad\n\\dot{g}=-J_\\theta(x,\\theta)^\\top a.||]</marimo-tex><span class=\"paragraph\">In code we do not explicitly form <marimo-tex class=\"arithmatex\">||(J_x||)</marimo-tex> or <marimo-tex class=\"arithmatex\">||(J_\\theta||)</marimo-tex>. Instead, we compute\nvector-Jacobian products:</span>\n<marimo-tex class=\"arithmatex\">||[\\frac{\\partial\\langle -a,f_\\theta(x)\\rangle}{\\partial x}\n=-J_x^\\top a,\\qquad\n\\frac{\\partial\\langle -a,f_\\theta(x)\\rangle}{\\partial \\theta}\n=-J_\\theta^\\top a.||]</marimo-tex><span class=\"paragraph\">In code, <code>torch.autograd.grad</code> computes these sensitivity products directly\n(without manually building full Jacobian matrices), using <code>grad_outputs=-a</code>.</span>\n<span class=\"paragraph\">This function returns one augmented derivative tuple\n<marimo-tex class=\"arithmatex\">||((\\dot{x},\\dot{a},\\dot{g})||)</marimo-tex>.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ZHCJ",
+      "code_hash": "33da5aa8c2db06c69029817778d285d3",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ROlb",
+      "code_hash": "d87f96bd71b0ca1161213e2b3fe21966",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"23-rk4-step-for-the-augmented-system\">2.3 RK4 step for the augmented system</h3>\n<span class=\"paragraph\">We apply RK4 simultaneously to all augmented states:</span>\n<marimo-tex class=\"arithmatex\">||[(x,a,g)_{k+1}=(x,a,g)_k+\\frac{h_k}{6}\n\\Big(K_1+2K_2+2K_3+K_4\\Big),||]</marimo-tex><span class=\"paragraph\">where each <marimo-tex class=\"arithmatex\">||(K_j||)</marimo-tex> contains the derivatives for <marimo-tex class=\"arithmatex\">||((x,a,g)||)</marimo-tex> at the corresponding RK4 stage.</span>\n<span class=\"paragraph\">In backward time, each step size is</span>\n<marimo-tex class=\"arithmatex\">||[h_k=t_{k-1}-t_k&lt;0,||]</marimo-tex><span class=\"paragraph\">so integrating with RK4 naturally moves from <marimo-tex class=\"arithmatex\">||(t_k||)</marimo-tex> to <marimo-tex class=\"arithmatex\">||(t_{k-1}||)</marimo-tex>.</span>\n<span class=\"paragraph\">The per-interval parameter-gradient contribution is the RK4 approximation of</span>\n<marimo-tex class=\"arithmatex\">||[\\Delta g_k\\approx\\int_{t_k}^{t_{k-1}}-(\\nabla_\\theta f_\\theta)^\\top a\\,dt,||]</marimo-tex><span class=\"paragraph\">which the code adds to <code>grad_params</code>.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "qnkX",
+      "code_hash": "426d19761433d5c05392fd1f710cb486",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "TqIu",
+      "code_hash": "03d4f3206739672f9fb1a967ee3a8343",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"24-custom-autograd-operator-with-adjoint-backward-pass\">2.4 Custom autograd operator with adjoint backward pass</h3>\n<span class=\"paragraph\"><code>forward</code>:</span>\n<ul>\n<li>integrates the forward ODE trajectory,</li>\n<li>stores <marimo-tex class=\"arithmatex\">||((t_k, x_k)||)</marimo-tex> for replay in reverse time.</li>\n</ul>\n<span class=\"paragraph\"><code>backward</code>:</span>\n<ol>\n<li>starts from terminal sensitivity <marimo-tex class=\"arithmatex\">||(a_N=\\partial\\mathcal{L}/\\partial x_N||)</marimo-tex>,</li>\n<li>integrates the augmented dynamics from <marimo-tex class=\"arithmatex\">||(t_N||)</marimo-tex> to <marimo-tex class=\"arithmatex\">||(t_0||)</marimo-tex>,</li>\n<li>accumulates parameter gradient contributions into <marimo-tex class=\"arithmatex\">||(g||)</marimo-tex>,</li>\n<li>applies discrete jump corrections:</li>\n</ol>\n<marimo-tex class=\"arithmatex\">||[a_{k-1}=a_{k-1}^{\\text{int}} + \\nabla_{x_{k-1}}\\ell_{k-1}.||]</marimo-tex><span class=\"paragraph\">Exact mapping to code variables:</span>\n<ul>\n<li><code>grad_y[k]</code> is <marimo-tex class=\"arithmatex\">||(\\partial\\mathcal{L}/\\partial x_k||)</marimo-tex> from PyTorch's chain rule.</li>\n<li><code>a = grad_y[-1]</code> initializes <marimo-tex class=\"arithmatex\">||(a_N||)</marimo-tex>.</li>\n<li>one backward interval computes <marimo-tex class=\"arithmatex\">||((a_{k-1}^{\\text{int}}, \\Delta g_k)||)</marimo-tex> via <code>rk4_augmented_step</code>.</li>\n<li><code>grad_params += g_step</code> accumulates <marimo-tex class=\"arithmatex\">||(\\sum_k \\Delta g_k \\approx g(t_0)||)</marimo-tex>.</li>\n<li><code>a = a + grad_y[k-1]</code> applies the jump at <marimo-tex class=\"arithmatex\">||(t_{k-1}||)</marimo-tex>.</li>\n</ul>\n<span class=\"paragraph\">So the returned parameter gradients are exactly the adjoint estimate of\n<marimo-tex class=\"arithmatex\">||(\\nabla_\\theta\\mathcal{L}||)</marimo-tex>, and <code>grad_x0</code> is <marimo-tex class=\"arithmatex\">||(\\partial\\mathcal{L}/\\partial x_0||)</marimo-tex>.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Vxnm",
+      "code_hash": "7b2b76e994cc76c6b28a04af5799d814",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "DnEU",
+      "code_hash": "b71d62a8ea9345cd31c45aca3047d65a",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"25-neural-ode-wrapper-using-the-custom-adjoint\">2.5 Neural ODE wrapper using the custom adjoint</h3>\n<span class=\"paragraph\"><code>NeuralODEAdjoint</code> wraps the custom operator behind the standard NODE API:</span>\n<marimo-tex class=\"arithmatex\">||[X = \\mathrm{ODESolve}(f_\\theta, x_0, \\{t_k\\}_{k=0}^{N}).||]</marimo-tex><span class=\"paragraph\">So training code can stay identical to standard PyTorch modules.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ulZA",
+      "code_hash": "b8b6f07e8c456ce73903cddb16cedca6",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ecfG",
+      "code_hash": "e99ccb1088b3cda7196298681573fc09",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"3-data-loss-terms-and-training\">3. Data, Loss Terms, and Training</h2>\n<span class=\"paragraph\">This section builds <marimo-tex class=\"arithmatex\">||(\\mathcal{D}||)</marimo-tex>, computes <marimo-tex class=\"arithmatex\">||(\\mathcal{L}||)</marimo-tex>, and optimizes <marimo-tex class=\"arithmatex\">||(\\theta||)</marimo-tex> using\ngradients supplied by the custom adjoint <code>backward</code>.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Pvdt",
+      "code_hash": "bc1f570ea291edb406928dfc264a8fc4",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"31-dataset-builder-mathcald\">3.1 Dataset builder <marimo-tex class=\"arithmatex\">||(\\mathcal{D}||)</marimo-tex></h3>\n<span class=\"paragraph\">We generate synthetic supervised trajectories:</span>\n<marimo-tex class=\"arithmatex\">||[x_{k}^i=\\Phi_{t_0\\to t_k}(x_0^i),\\qquad\n\\hat{x}_{k}^i=x_k^i+\\eta_k^i.||]</marimo-tex><span class=\"paragraph\">The resulting dataset is</span>\n<marimo-tex class=\"arithmatex\">||[\\mathcal{D}=\\Big\\{\\big(\\{(t_k,\\hat{x}_k^i)\\}_{k=0}^{N},x_0^i\\big)\\Big\\}_{i=1}^{M}.||]</marimo-tex></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ZBYS",
+      "code_hash": "7f15837584d1f8c01f7ad21759202a1b",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "aLJB",
+      "code_hash": "5c0d2f6b056ae8ba9044ad555fd9f265",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"32-observation-normalization\">3.2 Observation normalization</h3>\n<span class=\"paragraph\">We normalize with empirical observation statistics:</span>\n<marimo-tex class=\"arithmatex\">||[\\tilde{x}=\\frac{x-\\mu_{\\hat{x}}}{\\sigma_{\\hat{x}}+\\varepsilon}.||]</marimo-tex><span class=\"paragraph\">Inference outputs are later rescaled to compare against physical-space trajectories.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "nHfw",
+      "code_hash": "1f876050ea3df40d503a4a2e3adaa6aa",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "xXTn",
+      "code_hash": "be87de8467ca0cb9d17510f8d32e3048",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"33-optional-regularization-term\">3.3 Optional regularization term</h3>\n<span class=\"paragraph\">Data term:</span>\n<marimo-tex class=\"arithmatex\">||[\\mathcal{L}_{\\text{data}}=\n\\frac{1}{MN}\\sum_{i=1}^M\\sum_{k=0}^{N}\\|x_k^i-\\hat{x}_k^i\\|_2^2.||]</marimo-tex><span class=\"paragraph\">Regularizer:</span>\n<marimo-tex class=\"arithmatex\">||[R(\\theta)=\\frac{1}{\\operatorname{mean}\\|f_\\theta(x)\\|_2+\\varepsilon},\\qquad\n\\mathcal{L}=\\mathcal{L}_{\\text{data}}+\\lambda R(\\theta).||]</marimo-tex><span class=\"paragraph\">Toggling regularization changes only the additive <marimo-tex class=\"arithmatex\">||(\\lambda R(\\theta)||)</marimo-tex> term.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "AjVT",
+      "code_hash": "de5af2847243fb7119bbf5824314639d",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "pHFh",
+      "code_hash": "e23709d4acd269f2d6c6a6f17c01146a",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"34-training-routine\">3.4 Training routine</h3>\n<span class=\"paragraph\">Each epoch performs:</span>\n<ol>\n<li>forward solve for all trajectories,</li>\n<li>loss evaluation,</li>\n<li>custom-adjoint backward pass,</li>\n<li>optimizer/scheduler updates.</li>\n</ol>\n<span class=\"paragraph\">Parameter update:</span>\n<marimo-tex class=\"arithmatex\">||[\\theta \\leftarrow \\theta - \\alpha\\,\\nabla_\\theta\\mathcal{L}(\\theta),||]</marimo-tex><span class=\"paragraph\">with optional weight decay and gradient clipping for stability.</span>\n<span class=\"paragraph\">Practical interpretation:\nthe adjoint method reduces memory usage by recomputing sensitivity dynamics\nbackward in time instead of storing all intermediate solver gradients.</span>\n<span class=\"paragraph\">In this notebook, <code>loss.backward()</code> triggers the custom adjoint <code>backward</code>,\nwhich computes the parameter gradient through the sequence:</span>\n<marimo-tex class=\"arithmatex\">||[\\text{forward solve} \\;\\rightarrow\\; \\text{adjoint backward solve}\n\\;\\rightarrow\\; \\nabla_\\theta\\mathcal{L}.||]</marimo-tex></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "NCOB",
+      "code_hash": "a661a64341dc51ab1715fd09bcd7eb29",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "aqbW",
+      "code_hash": "1c06bb1e3a72de2bd5f04f150bc22e88",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><a id=\"control-panel\"></a></span>\n<h2 id=\"4-control-panel\">4. Control Panel</h2>\n<span class=\"paragraph\">Defaults mirror the adjoint script setup: normalization, scheduler, clipping,\nweight decay, and regularization start enabled.</span>\n<span class=\"paragraph\">For a simpler baseline, disable regularization and scheduler first, then re-enable progressively.\nUse <marimo-tex class=\"arithmatex\">||(N||)</marimo-tex> and <marimo-tex class=\"arithmatex\">||(M||)</marimo-tex> to trade computational cost vs. trajectory fidelity.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "TRpd",
+      "code_hash": "848fac042929057ff871147c758ed517",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='TRpd-23' random-id='10d80b52-7e14-2696-3ac0-bdfc2f6fada8'><marimo-button data-initial-value='0' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Train Torch Adjoint NODE&lt;/span&gt;&lt;/span&gt;&quot;' data-kind='&quot;neutral&quot;' data-disabled='false' data-full-width='false'></marimo-button></marimo-ui-element><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>Device:</strong> <code>cuda</code></span></span><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"physics\">Physics</h3></span><marimo-ui-element object-id='TRpd-1' random-id='2b351854-3471-5e4a-e2c0-e691dce14c93'><marimo-slider data-initial-value='9.81' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Gravity g&lt;/span&gt;&lt;/span&gt;&quot;' data-start='5.0' data-stop='15.0' data-step='0.01' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='TRpd-2' random-id='e1423a16-bcfe-dbcf-435a-0b49461d5b43'><marimo-slider data-initial-value='0.25' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Damping beta&lt;/span&gt;&lt;/span&gt;&quot;' data-start='0.05' data-stop='1.0' data-step='0.01' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='TRpd-3' random-id='5f9554ec-abde-8764-6687-d521ff93af42'><marimo-slider data-initial-value='0.9' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Length ell&lt;/span&gt;&lt;/span&gt;&quot;' data-start='0.3' data-stop='2.0' data-step='0.01' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"data-generation\">Data Generation</h3></span><marimo-ui-element object-id='TRpd-0' random-id='19e881d5-a301-3c86-f38a-d925adaf5a42'><marimo-number data-initial-value='0' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Seed&lt;/span&gt;&lt;/span&gt;&quot;' data-debounce='false' data-full-width='false' data-disabled='false'></marimo-number></marimo-ui-element><marimo-ui-element object-id='TRpd-4' random-id='0855f747-0f11-7731-39a9-fb25d9769f22'><marimo-slider data-initial-value='5.0' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Final time T&lt;/span&gt;&lt;/span&gt;&quot;' data-start='1.0' data-stop='10.0' data-step='0.5' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='TRpd-5' random-id='f2650d57-598d-a107-68ca-d884c9fd07a4'><marimo-slider data-initial-value='200' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Time steps N&lt;/span&gt;&lt;/span&gt;&quot;' data-start='50' data-stop='500' data-step='10' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='TRpd-6' random-id='ad254382-d6e9-f49b-f5de-33e471f44b0a'><marimo-slider data-initial-value='32' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Trajectories M&lt;/span&gt;&lt;/span&gt;&quot;' data-start='4' data-stop='128' data-step='4' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='TRpd-7' random-id='f15a9a81-f003-f6ba-a3b0-8d8ef4fd52fc'><marimo-slider data-initial-value='0.01' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Observation noise&lt;/span&gt;&lt;/span&gt;&quot;' data-start='0.0' data-stop='0.1' data-step='0.005' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"model\">Model</h3></span><marimo-ui-element object-id='TRpd-8' random-id='82a180e3-424a-da51-1d7c-5d625203e5d8'><marimo-slider data-initial-value='128' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Hidden dimension&lt;/span&gt;&lt;/span&gt;&quot;' data-start='16' data-stop='256' data-step='16' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='TRpd-9' random-id='d3393b42-6c6b-f0b9-dd13-0ed115c2ba62'><marimo-checkbox data-initial-value='true' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Use He initialization&lt;/span&gt;&lt;/span&gt;&quot;' data-disabled='false'></marimo-checkbox></marimo-ui-element><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"training\">Training</h3></span><marimo-ui-element object-id='TRpd-10' random-id='aab12e0c-2a69-c5ee-4ea5-0f22f924a374'><marimo-dropdown data-initial-value='[&quot;1000 (script default)&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Epochs&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;500&quot;,&quot;1000 (script default)&quot;,&quot;2000&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='TRpd-11' random-id='585b7559-2337-77a6-6e5d-a33d86e4e786'><marimo-dropdown data-initial-value='[&quot;1e-2 (script default)&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Learning rate&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;5e-2&quot;,&quot;1e-2 (script default)&quot;,&quot;5e-3&quot;,&quot;1e-3&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='TRpd-12' random-id='15282a91-77b7-b226-5541-e6592cc5109f'><marimo-slider data-initial-value='100' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Print every&lt;/span&gt;&lt;/span&gt;&quot;' data-start='10' data-stop='500' data-step='10' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"regularization\">Regularization</h3></span><marimo-ui-element object-id='TRpd-13' random-id='8926fcb3-626b-759c-3e17-e405f1e857bb'><marimo-checkbox data-initial-value='true' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Use derivative regularization&lt;/span&gt;&lt;/span&gt;&quot;' data-disabled='false'></marimo-checkbox></marimo-ui-element><marimo-ui-element object-id='TRpd-14' random-id='53c410a4-a8fe-aa90-07e1-a3305db5a0dc'><marimo-slider data-initial-value='0.01' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Regularization strength&lt;/span&gt;&lt;/span&gt;&quot;' data-start='0.0' data-stop='0.2' data-step='0.001' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"optimization-stabilization\">Optimization Stabilization</h3></span><marimo-ui-element object-id='TRpd-15' random-id='ede988be-d6ba-ad78-f149-9ca5ec06d4e0'><marimo-checkbox data-initial-value='true' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Use weight decay&lt;/span&gt;&lt;/span&gt;&quot;' data-disabled='false'></marimo-checkbox></marimo-ui-element><marimo-ui-element object-id='TRpd-16' random-id='089bcf8f-f094-e09a-7971-dcd32bb63f68'><marimo-dropdown data-initial-value='[&quot;1e-4 (script default)&quot;]' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Weight decay&lt;/span&gt;&lt;/span&gt;&quot;' data-options='[&quot;1e-5&quot;,&quot;1e-4 (script default)&quot;,&quot;1e-3&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='TRpd-17' random-id='1e6c7c3a-7cdb-1236-77ba-39af1e167312'><marimo-checkbox data-initial-value='true' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Use ReduceLROnPlateau&lt;/span&gt;&lt;/span&gt;&quot;' data-disabled='false'></marimo-checkbox></marimo-ui-element><marimo-ui-element object-id='TRpd-18' random-id='f2cf3162-cc4c-59ef-5f30-370f9d323e86'><marimo-slider data-initial-value='0.5' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Scheduler factor&lt;/span&gt;&lt;/span&gt;&quot;' data-start='0.1' data-stop='0.9' data-step='0.1' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='TRpd-19' random-id='4c07bcf6-1424-676a-c1b8-eecca309a224'><marimo-slider data-initial-value='100' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Scheduler patience&lt;/span&gt;&lt;/span&gt;&quot;' data-start='10' data-stop='300' data-step='10' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><marimo-ui-element object-id='TRpd-20' random-id='3d820027-3ef6-1a82-57bb-c2274f664b98'><marimo-checkbox data-initial-value='true' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Use gradient clipping&lt;/span&gt;&lt;/span&gt;&quot;' data-disabled='false'></marimo-checkbox></marimo-ui-element><marimo-ui-element object-id='TRpd-21' random-id='e26bb3cf-880c-4ac3-8c26-787a981de012'><marimo-slider data-initial-value='1.0' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Clip norm&lt;/span&gt;&lt;/span&gt;&quot;' data-start='0.1' data-stop='5.0' data-step='0.1' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"visualization\">Visualization</h3></span><marimo-ui-element object-id='TRpd-22' random-id='0788b379-28df-393d-8926-f1581ef7195f'><marimo-slider data-initial-value='3' data-label='&quot;&lt;span class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&gt;&lt;span class=&#92;&quot;paragraph&#92;&quot;&gt;Trajectories to plot&lt;/span&gt;&lt;/span&gt;&quot;' data-start='1' data-stop='8' data-step='1' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='false' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "TXez",
       "code_hash": "dea5dd163e48da2946b76df5ad317158",
       "outputs": [
         {
@@ -161,7 +447,20 @@
       "console": []
     },
     {
-      "id": "Hstk",
+      "id": "dNNg",
+      "code_hash": "5d41f2ea756dd0391b58565a01e495de",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><hr />\n<h2 id=\"5-results\">5. Results</h2></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "yCnT",
       "code_hash": "b6c7822efd703a5d21b4b506ac3fa2c1",
       "outputs": [
         {
@@ -174,8 +473,34 @@
       "console": []
     },
     {
-      "id": "nWHF",
-      "code_hash": "7f3ba1008dfc6f2b3baeaea595174397",
+      "id": "wlCL",
+      "code_hash": "7270205d6a05b632efced9cbec3130bf",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"51-trajectory-comparison\">5.1 Trajectory comparison</h3>\n<span class=\"paragraph\">For selected trajectories, the plots show:</span>\n<ul>\n<li><marimo-tex class=\"arithmatex\">||(u_k||)</marimo-tex> and <marimo-tex class=\"arithmatex\">||(v_k||)</marimo-tex> reference vs prediction,</li>\n<li>component errors\n  <marimo-tex class=\"arithmatex\">||(e_u(t_k)=u_k^{\\text{pred}}-\\hat{u}_k||)</marimo-tex> and\n  <marimo-tex class=\"arithmatex\">||(e_v(t_k)=v_k^{\\text{pred}}-\\hat{v}_k||)</marimo-tex>.</li>\n</ul></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "kqZH",
+      "code_hash": "c9ccba940f312a9d09f1aea8c9cf12a2",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "wAgl",
+      "code_hash": "36bc9b4c48a2ba77fe59c07a7a9886e7",
       "outputs": [
         {
           "type": "data",
@@ -187,8 +512,34 @@
       "console": []
     },
     {
-      "id": "iLit",
-      "code_hash": "be8cc771d52423395f6daf54fa95333e",
+      "id": "rEll",
+      "code_hash": "bbf28d3095d7e703b109962876260086",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"52-optimization-history\">5.2 Optimization history</h3>\n<span class=\"paragraph\">We monitor the optimization path across epochs:</span>\n<ul>\n<li><marimo-tex class=\"arithmatex\">||(\\mathcal{L}||)</marimo-tex> (total),</li>\n<li><marimo-tex class=\"arithmatex\">||(\\mathcal{L}_{\\text{data}}||)</marimo-tex>,</li>\n<li><marimo-tex class=\"arithmatex\">||(\\lambda R(\\theta)||)</marimo-tex>,</li>\n<li>learning rate schedule.</li>\n</ul>\n<span class=\"paragraph\">The log-scale y-axis reveals both early transients and late fine-tuning.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "dGlV",
+      "code_hash": "b0097c5782bda4a7aecc4acb9eddda5a",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "SdmI",
+      "code_hash": "2ea6b970d9d1c6ec1856c9a732de6333",
       "outputs": [
         {
           "type": "data",
