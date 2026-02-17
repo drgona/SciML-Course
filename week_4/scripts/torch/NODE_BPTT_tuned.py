@@ -1,11 +1,19 @@
 # Tuned PyTorch Neural ODE with a black-box neural network for a damped pendulum
 import math
+import os
+from pathlib import Path
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Use GPU if available, else CPU
-torch.manual_seed(0)  # Set random seed for reproducibility
+SEED = int(os.getenv("SEED", "0"))
+torch.manual_seed(SEED)  # Set random seed for reproducibility
+SCRIPT_DIR = Path(__file__).resolve().parent
+OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", str(SCRIPT_DIR)))
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+SHOW_PLOT = os.getenv("SHOW_PLOT", "1") == "1"
+PLOT_COUNT = int(os.getenv("PLOT_COUNT", "3"))
 
 # -----------------------------
 # 1) Problem setup and data gen
@@ -113,7 +121,15 @@ model = NeuralODE(hidden_dim=128).to(device)
 # Improvement: Add weight decay for L2 regularization to prevent overfitting to trivial solutions
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-2, weight_decay=1e-4)
 # Improvement: Add learning rate scheduler to reduce lr when loss plateaus
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=100, verbose=True)
+# Keep verbose logging when supported, but stay compatible with builds where the kwarg was removed.
+try:
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='min', factor=0.5, patience=100, verbose=True
+    )
+except TypeError:
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='min', factor=0.5, patience=100
+    )
 mse = nn.MSELoss()
 
 # -----------------------------
@@ -131,7 +147,8 @@ def compute_derivative_norm(model, x_sim):
     return norm
 
 # Improvement: Increase to 1000 epochs to allow more time for convergence
-num_epochs = 1000
+num_epochs = int(os.getenv("NUM_EPOCHS", "1000"))
+print_every = int(os.getenv("PRINT_EVERY", "100"))
 for epoch in range(num_epochs):
     optimizer.zero_grad()
     x_sim = model(x0_batch_normalized, t_grid)  # Simulate trajectories [N,M,2]
@@ -148,10 +165,10 @@ for epoch in range(num_epochs):
     torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
     optimizer.step()
     # Improvement: Step scheduler to adjust learning rate based on MSE loss
-    scheduler.step(mse_loss)
+    scheduler.step(mse_loss.detach())
 
     # Improvement: Enhanced logging to monitor loss and derivative norm
-    if epoch % 100 == 0:
+    if epoch % print_every == 0:
         print(f"[{epoch:04d}] mse_loss={mse_loss.item():.6f}  deriv_norm={deriv_norm.item():.6f}  lr={optimizer.param_groups[0]['lr']:.6f}")
 
 # -----------------------------
@@ -164,7 +181,15 @@ with torch.no_grad():
 # -----------------------------
 # 6) Plotting function
 # -----------------------------
-def plot_trajectories(t_grid, x_true, x_fit, num_trajectories=3):
+def plot_trajectories(
+    t_grid,
+    x_true,
+    x_fit,
+    num_trajectories=PLOT_COUNT,
+    save_dir=OUTPUT_DIR,
+    save_name="NODE_BPTT_tuned_plot.png",
+    show_plot=SHOW_PLOT,
+):
     """
     Plot true vs. fitted trajectories for a few sample trajectories.
     t_grid: [N], x_true: [N,M,2], x_fit: [N,M,2]
@@ -172,8 +197,10 @@ def plot_trajectories(t_grid, x_true, x_fit, num_trajectories=3):
     t_grid = t_grid.cpu().numpy()
     x_true = x_true.cpu().numpy()
     x_fit = x_fit.cpu().numpy()
-    indices = torch.randperm(M)[:num_trajectories].numpy()
-    fig, axes = plt.subplots(2, num_trajectories, figsize=(5*num_trajectories, 8), sharex=True)
+    indices = torch.arange(min(num_trajectories, M)).numpy()
+    fig, axes = plt.subplots(
+        3, num_trajectories, figsize=(5 * num_trajectories, 11), sharex=True, squeeze=False
+    )
     for i, idx in enumerate(indices):
         axes[0, i].plot(t_grid, x_true[:, idx, 0], 'b-', label='True Angle (u)')
         axes[0, i].plot(t_grid, x_fit[:, idx, 0], 'r--', label='Fitted Angle (u)')
@@ -189,8 +216,26 @@ def plot_trajectories(t_grid, x_true, x_fit, num_trajectories=3):
         axes[1, i].set_title(f'Trajectory {idx+1}: Angular Velocity')
         axes[1, i].legend()
         axes[1, i].grid(True)
+
+        err_u = x_fit[:, idx, 0] - x_true[:, idx, 0]
+        err_v = x_fit[:, idx, 1] - x_true[:, idx, 1]
+        axes[2, i].plot(t_grid, err_u, "m-", label="Error u_hat - u")
+        axes[2, i].plot(t_grid, err_v, "g--", label="Error v_hat - v")
+        axes[2, i].axhline(0.0, color="k", linewidth=1.0, alpha=0.5)
+        axes[2, i].set_xlabel("Time (s)")
+        axes[2, i].set_ylabel("State Error")
+        axes[2, i].set_title(f"Trajectory {idx+1}: Error")
+        axes[2, i].legend()
+        axes[2, i].grid(True)
+
     plt.tight_layout()
-    plt.show()
+    save_path = Path(save_dir) / save_name
+    fig.savefig(save_path, dpi=180, bbox_inches="tight")
+    print(f"saved_plot={save_path}")
+    if show_plot:
+        plt.show()
+    else:
+        plt.close(fig)
 
 # Call the plotting function
-plot_trajectories(t_grid, x_true, x_fit, num_trajectories=3)
+plot_trajectories(t_grid, x_true, x_fit, num_trajectories=PLOT_COUNT)

@@ -1,11 +1,19 @@
 # Vanilla PyTorch Neural ODE with a black-box neural network for a damped pendulum
 import math
+import os
+from pathlib import Path
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-torch.manual_seed(0)
+SEED = int(os.getenv("SEED", "0"))
+torch.manual_seed(SEED)
+SCRIPT_DIR = Path(__file__).resolve().parent
+OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", str(SCRIPT_DIR)))
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+SHOW_PLOT = os.getenv("SHOW_PLOT", "1") == "1"
+PLOT_COUNT = int(os.getenv("PLOT_COUNT", "3"))
 
 # -----------------------------
 # 1) Problem setup and data gen
@@ -104,14 +112,16 @@ mse = nn.MSELoss()
 # -----------------------------
 # 4) Training loop
 # -----------------------------
-for epoch in range(501):
+num_epochs = int(os.getenv("NUM_EPOCHS", "501"))
+print_every = int(os.getenv("PRINT_EVERY", "100"))
+for epoch in range(num_epochs):
     optimizer.zero_grad()
     x_sim = model(x0_batch, t_grid)      # [N,M,2]
     loss = mse(x_sim, x_obs)             # averages over N,M,2
     loss.backward()
     optimizer.step()
 
-    if epoch % 100 == 0:
+    if epoch % print_every == 0:
         print(f"[{epoch:04d}] loss={loss.item():.6f}")
 
 # -----------------------------
@@ -123,7 +133,15 @@ with torch.no_grad():
 # -----------------------------
 # 6) Plotting function
 # -----------------------------
-def plot_trajectories(t_grid, x_true, x_fit, num_trajectories=3):
+def plot_trajectories(
+    t_grid,
+    x_true,
+    x_fit,
+    num_trajectories=PLOT_COUNT,
+    save_dir=OUTPUT_DIR,
+    save_name="NODE_BPTT_vanilla_plot.png",
+    show_plot=SHOW_PLOT,
+):
     """
     Plot true vs. fitted trajectories for a few sample trajectories.
     t_grid: [N], x_true: [N,M,2], x_fit: [N,M,2]
@@ -133,11 +151,13 @@ def plot_trajectories(t_grid, x_true, x_fit, num_trajectories=3):
     x_true = x_true.cpu().numpy()
     x_fit = x_fit.cpu().numpy()
 
-    # Select a few trajectories to plot
-    indices = torch.randperm(M)[:num_trajectories].numpy()
+    # Select a fixed set of trajectories for reproducible comparison
+    indices = torch.arange(min(num_trajectories, M)).numpy()
 
-    # Create subplots for angle (u) and angular velocity (v)
-    fig, axes = plt.subplots(2, num_trajectories, figsize=(5*num_trajectories, 8), sharex=True)
+    # Create subplots for angle (u), angular velocity (v), and prediction error
+    fig, axes = plt.subplots(
+        3, num_trajectories, figsize=(5 * num_trajectories, 11), sharex=True, squeeze=False
+    )
 
     for i, idx in enumerate(indices):
         # Plot angle (u)
@@ -158,8 +178,25 @@ def plot_trajectories(t_grid, x_true, x_fit, num_trajectories=3):
         axes[1, i].legend()
         axes[1, i].grid(True)
 
+        err_u = x_fit[:, idx, 0] - x_true[:, idx, 0]
+        err_v = x_fit[:, idx, 1] - x_true[:, idx, 1]
+        axes[2, i].plot(t_grid, err_u, "m-", label="Error u_hat - u")
+        axes[2, i].plot(t_grid, err_v, "g--", label="Error v_hat - v")
+        axes[2, i].axhline(0.0, color="k", linewidth=1.0, alpha=0.5)
+        axes[2, i].set_xlabel("Time (s)")
+        axes[2, i].set_ylabel("State Error")
+        axes[2, i].set_title(f"Trajectory {idx+1}: Error")
+        axes[2, i].legend()
+        axes[2, i].grid(True)
+
     plt.tight_layout()
-    plt.show()
+    save_path = Path(save_dir) / save_name
+    fig.savefig(save_path, dpi=180, bbox_inches="tight")
+    print(f"saved_plot={save_path}")
+    if show_plot:
+        plt.show()
+    else:
+        plt.close(fig)
 
 # Call the plotting function
-plot_trajectories(t_grid, x_true, x_fit, num_trajectories=3)
+plot_trajectories(t_grid, x_true, x_fit, num_trajectories=PLOT_COUNT)
