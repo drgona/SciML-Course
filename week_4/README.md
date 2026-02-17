@@ -26,20 +26,20 @@ Week 4 course materials for training Neural ODE models for pendulum dynamics usi
 
 ### <img src="https://github.com/marimo-team/marimo/raw/main/docs/_static/marimo-logotype-horizontal.png" alt="marimo" height="40" /> + <img src="https://github.com/google/jax/raw/main/images/jax_logo_250px.png" alt="JAX" height="30" />
 
-- [`Neural ODE BPTT (JAX)`](./marimo/node_jax/node_bptt_jax.py)
-- [`Neural ODE Adjoint (JAX)`](./marimo/node_jax/node_adjoint_jax.py)
+- [![Open in molab](https://molab.marimo.io/molab-shield.svg)](https://molab.marimo.io/notebooks/nb_Qb9QbK24mhGmibu21nnK1B) Neural ODE BPTT (JAX)
+- [![Open in molab](https://molab.marimo.io/molab-shield.svg)](https://molab.marimo.io/notebooks/nb_WwLinsU3xnFY6kP3MzbEva) Neural ODE Adjoint (JAX)
 
 ### <img src="https://github.com/marimo-team/marimo/raw/main/docs/_static/marimo-logotype-horizontal.png" alt="marimo" height="40" /> + <img src="https://raw.githubusercontent.com/pytorch/pytorch/main/docs/source/_static/img/pytorch-logo-dark.png" alt="PyTorch" height="30" />
 
-- [`Neural ODE BPTT (PyTorch)`](./marimo/node_torch/node_bptt_torch.py)
-- [`Neural ODE Adjoint (PyTorch)`](./marimo/node_torch/node_adjoint_torch.py)
+- [![Open in molab](https://molab.marimo.io/molab-shield.svg)](https://molab.marimo.io/notebooks/nb_zX5adqKmNem4MjViWf5Uxc) Neural ODE BPTT (PyTorch)
+- [![Open in molab](https://molab.marimo.io/molab-shield.svg)](https://molab.marimo.io/notebooks/nb_jd47abUL1WHg6FH55T5QEy) Neural ODE Adjoint (PyTorch)
 
 ## Local Run (Optional)
 
 If hosted notebooks feel slow, run locally with marimo or use script versions in `week_4/scripts`.
 
 ```bash
-# Option 1: marimo app (JAX first)
+# Option 1: marimo app
 marimo run week_4/marimo/node_jax/node_bptt_jax.py
 
 # Option 2: marimo editor mode
