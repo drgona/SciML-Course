@@ -77,8 +77,8 @@ with gradients computed either by:
 
 ### <img src="https://github.com/marimo-team/marimo/raw/main/docs/_static/marimo-logotype-horizontal.png" alt="marimo" height="40" /> + <img src="https://github.com/google/jax/raw/main/images/jax_logo_250px.png" alt="JAX" height="30" />
 
-- [![Open in molab](https://molab.marimo.io/molab-shield.svg)](https://molab.marimo.io/notebooks/nb_zy85u2eGsD5itAQh4WNBKz) Neural ODE BPTT (JAX)
-- [![Open in molab](https://molab.marimo.io/molab-shield.svg)](https://molab.marimo.io/notebooks/nb_qyfKCRfQzHTnvH4vZq14hV) Neural ODE Adjoint (JAX)
+- [![Open in molab](https://molab.marimo.io/molab-shield.svg)](https://molab.marimo.io/notebooks/nb_7owa3TbzMdhxEpdVGNsuVi) Neural ODE BPTT (JAX)
+- [![Open in molab](https://molab.marimo.io/molab-shield.svg)](https://molab.marimo.io/notebooks/nb_wwfyfjUxX3rs2EmLskw46g) Neural ODE Adjoint (JAX)
 
 ### <img src="https://github.com/marimo-team/marimo/raw/main/docs/_static/marimo-logotype-horizontal.png" alt="marimo" height="40" /> + <img src="https://raw.githubusercontent.com/pytorch/pytorch/main/docs/source/_static/img/pytorch-logo-dark.png" alt="PyTorch" height="30" />
 
