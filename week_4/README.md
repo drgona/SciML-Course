@@ -22,7 +22,7 @@
 
 Week 4 course materials for training Neural ODE models for pendulum dynamics using both backpropagation through time (BPTT) and adjoint-style gradients.
 
-## General Problem Formulation
+## General Problem Formulation for NODE
 
 Given trajectory data from an unknown continuous-time system, we want to learn a neural vector field that reproduces the observed dynamics.
 
