@@ -143,7 +143,7 @@ for epoch in range(num_epochs):
 
 
 
-i = 50
+i = 5
 # Visualize final solution for the first sample
 final_x = l2o.forward(xi_batch[i])
 visualize_2d_solution(final_x, q_batch[i], a_batch[i], b_batch[i])
